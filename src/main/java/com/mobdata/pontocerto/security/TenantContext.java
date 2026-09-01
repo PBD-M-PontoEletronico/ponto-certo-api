@@ -1,4 +1,4 @@
-package com.mobdata.pontocerto.secuirity;
+package com.mobdata.pontocerto.security;
 
 import com.mobdata.pontocerto.model.Perfil;
 

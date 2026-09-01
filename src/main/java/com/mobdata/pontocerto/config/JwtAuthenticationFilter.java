@@ -1,7 +1,7 @@
 package com.mobdata.pontocerto.config;
 
 
-import com.mobdata.pontocerto.secuirity.TenantContext;
+import com.mobdata.pontocerto.security.TenantContext;
 import com.mobdata.pontocerto.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
