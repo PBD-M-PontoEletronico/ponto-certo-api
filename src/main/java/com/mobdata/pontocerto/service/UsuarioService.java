@@ -6,9 +6,11 @@ import com.mobdata.pontocerto.model.Perfil;
 import com.mobdata.pontocerto.model.Usuario;
 import com.mobdata.pontocerto.repository.EmpresaRepository;
 import com.mobdata.pontocerto.repository.UsuarioRepository;
+import com.mobdata.pontocerto.security.TenantContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import java.util.UUID;
 
 @Service
 public class UsuarioService {
@@ -26,14 +28,17 @@ public class UsuarioService {
         if (usuarioRepository.findByUsuario(request.usuario()).isPresent()) {
             throw new IllegalArgumentException("Usuário já cadastrado");
         }
-
-        // Todo perfil, exceto SUPERADMIN, precisa de empresa
         Empresa empresa = null;
         if (request.perfil() != Perfil.SUPERADMIN) {
-            if (request.empresaId() == null) {
+            UUID empresaId = TenantContext.isSuperAdmin()
+                    ? request.empresaId()               // superadmin pode escolher a empresa
+                    : TenantContext.getEmpresaId();      // RH_ADMIN só cadastra na própria empresa
+
+            if (empresaId == null) {
                 throw new IllegalArgumentException("Empresa é obrigatória para esse perfil");
             }
-            empresa = empresaRepository.findById(request.empresaId())
+
+            empresa = empresaRepository.findById(empresaId)
                     .orElseThrow(() -> new IllegalArgumentException("Empresa não encontrada"));
         }
 
