@@ -3,9 +3,9 @@ package com.mobdata.pontocerto.service;
 import com.mobdata.pontocerto.dto.SetorRequestDTO;
 import com.mobdata.pontocerto.model.Empresa;
 import com.mobdata.pontocerto.model.Setor;
+import com.mobdata.pontocerto.repository.AlocacaoRepository;
 import com.mobdata.pontocerto.repository.EmpresaRepository;
 import com.mobdata.pontocerto.repository.SetorRepository;
-import com.mobdata.pontocerto.repository.UsuarioRepository;
 import com.mobdata.pontocerto.security.TenantContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -23,7 +23,7 @@ public class SetorService {
     private EmpresaRepository empresaRepository;
 
     @Autowired
-    private UsuarioRepository usuarioRepository;
+    private AlocacaoRepository alocacaoRepository;
 
     public Setor cadastrar(SetorRequestDTO request) {
         Empresa empresa = resolverEmpresa(request.empresaId());
@@ -63,10 +63,10 @@ public class SetorService {
     public void excluir(UUID id) {
         Setor setor = buscarPorId(id);
 
-        if (usuarioRepository.existsBySetorId(setor.getId())) {
+        if (alocacaoRepository.existsBySetorIdAndDataFimIsNull(setor.getId())) {
             throw new IllegalStateException(
                     "Não é possível excluir o setor \"" + setor.getNome()
-                            + "\": há funcionário(s) alocado(s) nele. Realoque-os antes de excluir."
+                            + "\": há funcionário(s) alocado(s) nele. Encerre as alocações antes de excluir."
             );
         }
 

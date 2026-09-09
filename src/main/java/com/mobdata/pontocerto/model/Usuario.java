@@ -39,7 +39,9 @@ public class Usuario {
     @JoinColumn(name = "empresa_id", nullable = true)
     private Empresa empresa;
 
-    @ManyToOne
-    @JoinColumn(name = "setor_id", nullable = true)
-    private Setor setor;
+    @Column(name = "matricula")
+    private String matricula;
+
+    @Column(name = "cargo")
+    private String cargo;
 }

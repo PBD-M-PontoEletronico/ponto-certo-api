@@ -56,6 +56,7 @@ public class SecurityConfig {
                         .requestMatchers("/empresas/**").hasAuthority("SUPERADMIN")
                         .requestMatchers("/usuarios/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .requestMatchers("/setores/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
+                        .requestMatchers("/alocacoes/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint()))

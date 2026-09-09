@@ -17,6 +17,10 @@ public record UsuarioRequestDTO(
         String senha,
         @NotNull(message = "Perfil é obrigatório")
         Perfil perfil,
-        UUID empresaId
+        UUID empresaId,
+        // Só usados/obrigatórios quando perfil == FUNCIONARIO
+
+        String matricula,
+        String cargo
 ) {
 }

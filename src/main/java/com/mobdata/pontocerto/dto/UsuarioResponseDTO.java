@@ -2,14 +2,15 @@ package com.mobdata.pontocerto.dto;
 
 import com.mobdata.pontocerto.model.Perfil;
 
-import java.util.List;
 import java.util.UUID;
 
-public record LoginResponseDTO(
-        String token,
+public record UsuarioResponseDTO(
+        UUID id,
         String nome,
+        String usuario,
         Perfil perfil,
         UUID empresaId,
-        List<UUID> setorsId
+        String matricula,
+        String cargo
 ) {
 }

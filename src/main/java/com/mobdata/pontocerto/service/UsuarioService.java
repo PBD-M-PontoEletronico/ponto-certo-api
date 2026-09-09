@@ -1,6 +1,7 @@
 package com.mobdata.pontocerto.service;
 
 import com.mobdata.pontocerto.dto.UsuarioRequestDTO;
+import com.mobdata.pontocerto.dto.UsuarioResponseDTO;
 import com.mobdata.pontocerto.model.Empresa;
 import com.mobdata.pontocerto.model.Perfil;
 import com.mobdata.pontocerto.model.Usuario;
@@ -10,6 +11,8 @@ import com.mobdata.pontocerto.security.TenantContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -41,6 +44,16 @@ public class UsuarioService {
             empresa = empresaRepository.findById(empresaId)
                     .orElseThrow(() -> new IllegalArgumentException("Empresa não encontrada"));
         }
+        if (request.perfil() == Perfil.FUNCIONARIO) {
+            if (request.matricula() == null || request.matricula().isBlank()) {
+                throw new IllegalArgumentException("Matrícula é obrigatória para funcionários");
+            }
+            if (usuarioRepository.existsByMatriculaAndEmpresaId(request.matricula(), empresa.getId())) {
+                throw new IllegalArgumentException(
+                        "Matrícula \"" + request.matricula() + "\" já cadastrada nesta empresa"
+                );
+            }
+        }
 
         Usuario usuario = new Usuario();
         usuario.setNome(request.nome());
@@ -48,7 +61,25 @@ public class UsuarioService {
         usuario.setSenhaHash(passwordEncoder.encode(request.senha()));
         usuario.setPerfil(request.perfil());
         usuario.setEmpresa(empresa);
+        usuario.setMatricula(request.matricula()); // NOVO
+        usuario.setCargo(request.cargo());
 
         return usuarioRepository.save(usuario);
+    }
+
+    public List<UsuarioResponseDTO> listar(UUID empresaIdParam) {
+        UUID empresaId = TenantContext.isSuperAdmin() ? empresaIdParam : TenantContext.getEmpresaId();
+
+        if (empresaId == null) {
+            throw new IllegalArgumentException("Informe a empresa (empresaId) para listar os usuários");
+        }
+
+        return usuarioRepository.findAllByEmpresaId(empresaId).stream()
+                .map(u -> new UsuarioResponseDTO(
+                        u.getId(), u.getNome(), u.getUsuario(), u.getPerfil(),
+                        u.getEmpresa() != null ? u.getEmpresa().getId() : null,
+                        u.getMatricula(), u.getCargo()
+                ))
+                .toList();
     }
 }
