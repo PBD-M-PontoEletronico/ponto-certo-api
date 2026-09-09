@@ -4,11 +4,14 @@ import com.mobdata.pontocerto.dto.LoginRequestDTO;
 import com.mobdata.pontocerto.dto.LoginResponseDTO;
 import com.mobdata.pontocerto.exception.CredenciaisInvalidasException;
 import com.mobdata.pontocerto.model.Usuario;
+import com.mobdata.pontocerto.repository.AlocacaoRepository;
 import com.mobdata.pontocerto.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -21,6 +24,9 @@ public class AuthService {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private AlocacaoRepository alocacaoRepository;
 
     public LoginResponseDTO login(LoginRequestDTO request) {
         Usuario usuario = usuarioRepository.findByUsuario(request.usuario())
@@ -40,12 +46,17 @@ public class AuthService {
                 usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null,
                 usuario.getPerfil()
         );
+        List<UUID> setoresIds = alocacaoRepository.findAllByUsuarioId(usuario.getId()).stream()
+                .filter(a -> a.getDataFim() == null) // só alocações ainda ativas
+                .map(a -> a.getSetor().getId())
+                .toList();
 
         return new LoginResponseDTO(
                 token,
                 usuario.getNome(),
                 usuario.getPerfil(),
-                usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null
+                usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null,
+                setoresIds
         );
     }
 }
