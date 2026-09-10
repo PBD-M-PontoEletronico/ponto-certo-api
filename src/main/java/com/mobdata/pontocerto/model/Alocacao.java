@@ -22,7 +22,7 @@ public class Alocacao {
     private UUID id;
 
     @ManyToOne
-    @JoinColumn(name = "usuario_id", nullable = false) // era funcionario_id
+    @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
 
     @ManyToOne

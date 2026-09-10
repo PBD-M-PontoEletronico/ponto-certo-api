@@ -1,6 +1,7 @@
 package com.mobdata.pontocerto.controller;
 
 import com.mobdata.pontocerto.dto.AlocacaoRequestDTO;
+import com.mobdata.pontocerto.dto.AlocacaoResponseDTO;
 import com.mobdata.pontocerto.model.Alocacao;
 import com.mobdata.pontocerto.service.AlocacaoService;
 import jakarta.validation.Valid;
@@ -19,7 +20,6 @@ public class AlocacaoController {
     @Autowired
     private AlocacaoService alocacaoService;
 
-    // NOVO: estava faltando por completo
     @PostMapping("/alocacoes")
     public ResponseEntity<Alocacao> alocar(@Valid @RequestBody AlocacaoRequestDTO request) {
         Alocacao alocacao = alocacaoService.alocar(request);
@@ -32,12 +32,12 @@ public class AlocacaoController {
     }
 
     @GetMapping("/usuarios/{id}/alocacoes")
-    public ResponseEntity<List<Alocacao>> historicoDoFuncionario(@PathVariable UUID id) {
+    public ResponseEntity<List<AlocacaoResponseDTO>> historicoDoFuncionario(@PathVariable UUID id) {
         return ResponseEntity.ok(alocacaoService.historicoDoFuncionario(id));
     }
 
     @GetMapping("/setores/{id}/alocacoes-atuais")
-    public ResponseEntity<List<Alocacao>> alocadosAtualmenteNoSetor(@PathVariable UUID id) {
+    public ResponseEntity<List<AlocacaoResponseDTO>> alocadosAtualmenteNoSetor(@PathVariable UUID id) {
         return ResponseEntity.ok(alocacaoService.alocadosAtualmenteNoSetor(id));
     }
 }

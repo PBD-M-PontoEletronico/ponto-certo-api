@@ -1,6 +1,7 @@
 package com.mobdata.pontocerto.service;
 
 import com.mobdata.pontocerto.dto.AlocacaoRequestDTO;
+import com.mobdata.pontocerto.dto.AlocacaoResponseDTO;
 import com.mobdata.pontocerto.model.Alocacao;
 import com.mobdata.pontocerto.model.Setor;
 import com.mobdata.pontocerto.model.Usuario;
@@ -71,12 +72,20 @@ public class AlocacaoService {
         return alocacaoRepository.save(alocacao);
     }
 
-    public List<Alocacao> historicoDoFuncionario(UUID usuarioId) {
-        return alocacaoRepository.findAllByUsuarioId(usuarioId);
+    public List<AlocacaoResponseDTO> historicoDoFuncionario(UUID usuarioId) {
+        return alocacaoRepository
+                .findAllByUsuarioId(usuarioId)
+                .stream()
+                .map(AlocacaoResponseDTO::fromEntity)
+                .toList();
     }
 
-    public List<Alocacao> alocadosAtualmenteNoSetor(UUID setorId) {
+    public List<AlocacaoResponseDTO> alocadosAtualmenteNoSetor(UUID setorId) {
         setorService.buscarPorId(setorId);
-        return alocacaoRepository.findAllBySetorIdAndDataFimIsNull(setorId);
+        return alocacaoRepository
+                .findAllBySetorIdAndDataFimIsNull(setorId)
+                .stream()
+                .map(AlocacaoResponseDTO::fromEntity)
+                .toList();
     }
 }
