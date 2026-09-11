@@ -17,6 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -41,10 +42,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (jwtService.tokenValido(token)) {
             String usuario = jwtService.extrairUsuario(token);
+            UUID usuarioId = jwtService.extrairUsuarioId(token);
             var empresaId = jwtService.extrairEmpresaId(token);
             var perfil = jwtService.extrairPerfil(token);
 
-            TenantContext.set(empresaId, perfil);
+            TenantContext.set(empresaId, perfil, usuarioId);
             var authorities = List.of(new SimpleGrantedAuthority(perfil.name()));
             var authentication = new UsernamePasswordAuthenticationToken(usuario, null, authorities);
             SecurityContextHolder.getContext().setAuthentication(authentication);

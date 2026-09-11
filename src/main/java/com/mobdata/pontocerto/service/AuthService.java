@@ -42,6 +42,7 @@ public class AuthService {
         }
 
         String token = jwtService.gerarToken(
+                usuario.getId(),
                 usuario.getUsuario(),
                 usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null,
                 usuario.getPerfil()

@@ -21,11 +21,12 @@ public class JwtService {
     @Value("${jwt.expiration}")
     private long expiration;
 
-    public String gerarToken(String usuario, UUID empresaId, Perfil perfil) {
+    public String gerarToken( UUID usuarioId, String usuario, UUID empresaId, Perfil perfil) {
         SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
 
         var builder = Jwts.builder()
                 .subject(usuario)
+                .claim("usuarioId", usuarioId.toString())
                 .claim("perfil", perfil.name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
@@ -50,6 +51,11 @@ public class JwtService {
     public Perfil extrairPerfil(String token) {
         String perfilStr = getClaims(token).get("perfil", String.class);
         return Perfil.valueOf(perfilStr);
+    }
+
+    public UUID extrairUsuarioId(String token) {
+        String idStr = getClaims(token).get("usuarioId", String.class);
+        return idStr != null ? UUID.fromString(idStr) : null;
     }
 
     public boolean tokenValido(String token) {
