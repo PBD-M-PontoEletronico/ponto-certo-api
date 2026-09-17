@@ -20,7 +20,7 @@ public record UsuarioResponseDTO(
                 usuario.getNome(),
                 usuario.getUsuario(),
                 usuario.getPerfil(),
-                usuario.getEmpresa().getId(),
+                usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null,
                 usuario.getMatricula(),
                 usuario.getCargo()
         );
