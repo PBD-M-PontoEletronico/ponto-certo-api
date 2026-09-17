@@ -1,5 +1,7 @@
 package com.mobdata.pontocerto.service;
 
+import com.mobdata.pontocerto.dto.PaginaDTO;
+import com.mobdata.pontocerto.dto.UsuarioFiltroDTO;
 import com.mobdata.pontocerto.dto.UsuarioRequestDTO;
 import com.mobdata.pontocerto.dto.UsuarioResponseDTO;
 import com.mobdata.pontocerto.model.Empresa;
@@ -8,7 +10,11 @@ import com.mobdata.pontocerto.model.Usuario;
 import com.mobdata.pontocerto.repository.EmpresaRepository;
 import com.mobdata.pontocerto.repository.UsuarioRepository;
 import com.mobdata.pontocerto.security.TenantContext;
+import com.mobdata.pontocerto.specification.UsuarioSpecification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -81,5 +87,24 @@ public class UsuarioService {
                         u.getMatricula(), u.getCargo()
                 ))
                 .toList();
+    }
+
+    public PaginaDTO<UsuarioResponseDTO> buscar(UsuarioFiltroDTO filtro, Pageable pageable) {
+        UUID empresaId = TenantContext.isSuperAdmin() ? filtro.empresaId() : TenantContext.getEmpresaId();
+
+
+
+        Specification<Usuario> spec = Specification
+                .where(UsuarioSpecification.comNome(filtro.nome()))
+                .and(UsuarioSpecification.comUsuario(filtro.usuario()))
+                .and(UsuarioSpecification.comMatricula(filtro.matricula()))
+                .and(UsuarioSpecification.comCargo(filtro.cargo()))
+                .and(UsuarioSpecification.comPerfil(filtro.perfil()))
+                .and(UsuarioSpecification.comEmpresaId(empresaId));
+
+        Page<UsuarioResponseDTO> pagina = usuarioRepository.findAll(spec, pageable)
+                .map(UsuarioResponseDTO::fromEntity);
+
+        return PaginaDTO.fromPage(pagina);
     }
 }
