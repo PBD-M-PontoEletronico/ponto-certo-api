@@ -12,8 +12,12 @@ public record AlocacaoRequestDTO(
         @NotNull(message = "Setor é obrigatório")
         UUID setorId,
 
+        @NotNull(message = "Escala é obrigatória")
+        UUID escalaId,
+
         @NotNull(message = "Data de início é obrigatória")
         LocalDate dataInicio,
 
+        @NotNull(message = "Data de fim é obrigatória")
         LocalDate dataFim
 ) {}

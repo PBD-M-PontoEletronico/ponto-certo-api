@@ -10,6 +10,7 @@ import com.mobdata.pontocerto.security.TenantContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -63,7 +64,7 @@ public class SetorService {
     public void excluir(UUID id) {
         Setor setor = buscarPorId(id);
 
-        if (alocacaoRepository.existsBySetorIdAndDataFimIsNull(setor.getId())) {
+        if (alocacaoRepository.existsBySetorIdAndDataFimGreaterThanEqual(setor.getId(), LocalDate.now())) {
             throw new IllegalStateException(
                     "Não é possível excluir o setor \"" + setor.getNome()
                             + "\": há funcionário(s) alocado(s) nele. Encerre as alocações antes de excluir."

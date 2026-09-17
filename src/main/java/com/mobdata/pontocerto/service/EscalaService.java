@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -107,38 +106,7 @@ public class EscalaService {
     }
 
     private boolean ehDiaDeTrabalho(Escala escala, LocalDate data) {
-        Integer tamanhoCiclo = tamanhoDoCiclo(escala.getModelo());
-
-        if (tamanhoCiclo != null) {
-            if (escala.getDataReferencia() == null) {
-                return false;
-            }
-            long diferencaDias = ChronoUnit.DAYS.between(escala.getDataReferencia(), data);
-            long posicao = Math.floorMod(diferencaDias, tamanhoCiclo);
-            return posicao == 0;
-        }
-
-        var diasSemana = escala.getDiasSemana();
-
-        if (escala.getModelo() == ModelEscala.COMERCIAL_5X2) {
-            if (diasSemana != null && !diasSemana.isEmpty()) {
-                return diasSemana.contains(data.getDayOfWeek().getValue() % 7);
-            }
-            int diaSemana = data.getDayOfWeek().getValue();
-            return diaSemana >= 1 && diaSemana <= 5;
-        }
-
-        if (diasSemana != null && !diasSemana.isEmpty()) {
-            return diasSemana.contains(data.getDayOfWeek().getValue() % 7);
-        }
-
-        return true;
-    }
-
-    private Integer tamanhoDoCiclo(ModelEscala modelo) {
-        if (modelo == ModelEscala.JORNADA_24X72) return 4;
-        if (modelo == ModelEscala.JORNADA_12X36) return 2;
-        return null;
+        return EscalaCalculo.ehDiaDeTrabalho(escala, data);
     }
 
     private Empresa resolverEmpresa(UUID empresaIdDoRequest) {

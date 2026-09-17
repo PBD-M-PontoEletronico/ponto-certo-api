@@ -29,9 +29,13 @@ public class Alocacao {
     @JoinColumn(name = "setor_id", nullable = false)
     private Setor setor;
 
+    @ManyToOne
+    @JoinColumn(name = "escala_id", nullable = false)
+    private Escala escala;
+
     @Column(name = "data_inicio", nullable = false)
     private LocalDate dataInicio;
 
-    @Column(name = "data_fim")
+    @Column(name = "data_fim", nullable = false)
     private LocalDate dataFim;
 }
