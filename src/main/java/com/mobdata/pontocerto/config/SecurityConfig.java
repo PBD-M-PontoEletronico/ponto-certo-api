@@ -57,6 +57,8 @@ public class SecurityConfig {
                         .requestMatchers("/usuarios/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .requestMatchers("/setores/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .requestMatchers("/alocacoes/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
+                        .requestMatchers("/feriados/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
+                        .requestMatchers("/afastamentos/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint()))

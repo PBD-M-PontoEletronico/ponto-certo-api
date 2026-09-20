@@ -3,7 +3,8 @@ package com.mobdata.pontocerto.controller;
 import com.mobdata.pontocerto.dto.AgendaTurnoDTO;
 import com.mobdata.pontocerto.dto.AlocacaoRequestDTO;
 import com.mobdata.pontocerto.dto.AlocacaoResponseDTO;
-import com.mobdata.pontocerto.model.Alocacao;
+import com.mobdata.pontocerto.dto.TrocaEscalaRequestDTO;
+import com.mobdata.pontocerto.dto.TrocaEscalaResponseDTO;
 import com.mobdata.pontocerto.service.AlocacaoService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,15 +23,24 @@ public class AlocacaoController {
     @Autowired
     private AlocacaoService alocacaoService;
 
+    // Devolve o DTO (e não a entidade Alocacao) para não expor o senhaHash do usuário
     @PostMapping("/alocacoes")
-    public ResponseEntity<Alocacao> alocar(@Valid @RequestBody AlocacaoRequestDTO request) {
-        Alocacao alocacao = alocacaoService.alocar(request);
+    public ResponseEntity<AlocacaoResponseDTO> alocar(@Valid @RequestBody AlocacaoRequestDTO request) {
+        AlocacaoResponseDTO alocacao = AlocacaoResponseDTO.fromEntity(alocacaoService.alocar(request));
         return ResponseEntity.status(HttpStatus.CREATED).body(alocacao);
     }
 
     @PatchMapping("/alocacoes/{id}/encerrar")
-    public ResponseEntity<Alocacao> encerrar(@PathVariable UUID id, @RequestParam LocalDate dataFim) {
-        return ResponseEntity.ok(alocacaoService.encerrar(id, dataFim));
+    public ResponseEntity<AlocacaoResponseDTO> encerrar(@PathVariable UUID id, @RequestParam LocalDate dataFim) {
+        return ResponseEntity.ok(AlocacaoResponseDTO.fromEntity(alocacaoService.encerrar(id, dataFim)));
+    }
+
+    @PostMapping("/alocacoes/{id}/trocar-escala")
+    public ResponseEntity<TrocaEscalaResponseDTO> trocarEscala(
+            @PathVariable UUID id,
+            @Valid @RequestBody TrocaEscalaRequestDTO request
+    ) {
+        return ResponseEntity.ok(alocacaoService.trocarEscala(id, request));
     }
 
     @GetMapping("/usuarios/{id}/alocacoes")
