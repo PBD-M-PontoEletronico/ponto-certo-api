@@ -17,6 +17,12 @@ spring:
         format_sql: true
     database-platform: org.hibernate.dialect.PostgreSQLDialect
 
+  # Upload de anexos (afastamentos): até 5 MB por arquivo
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
 jwt:
   secret: "minha-chave-secreta-bem-longa-e-dificil-de-adivinhar-troque-isso-depois"
   expiration: 86400000
@@ -27,3 +33,7 @@ server:
 logging:
   level:
     org.hibernate.SQL: debug
+
+pontocerto:
+  # Pasta onde ficam os anexos de afastamento (relativa a onde a API é iniciada)
+  uploads-dir: uploads

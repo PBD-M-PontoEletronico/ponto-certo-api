@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -73,6 +74,20 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+    // Anexo maior que o limite configurado (spring.servlet.multipart) -> 413 Payload Too Large
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponseDTO> handleUploadGrande(MaxUploadSizeExceededException ex) {
+        ErrorResponseDTO response = new ErrorResponseDTO(
+                "O anexo deve ter no máximo 5 MB",
+                null,
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                LocalDateTime.now(),
+                null
+        );
+
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(response);
     }
 
     // Qualquer outro erro não previsto -> 500 Internal Server Error

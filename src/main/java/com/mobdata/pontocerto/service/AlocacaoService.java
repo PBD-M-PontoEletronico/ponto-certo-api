@@ -3,15 +3,22 @@ package com.mobdata.pontocerto.service;
 import com.mobdata.pontocerto.dto.AgendaTurnoDTO;
 import com.mobdata.pontocerto.dto.AlocacaoRequestDTO;
 import com.mobdata.pontocerto.dto.AlocacaoResponseDTO;
+import com.mobdata.pontocerto.dto.TrocaEscalaRequestDTO;
+import com.mobdata.pontocerto.dto.TrocaEscalaResponseDTO;
+import com.mobdata.pontocerto.model.Afastamento;
 import com.mobdata.pontocerto.model.Alocacao;
 import com.mobdata.pontocerto.model.Escala;
+import com.mobdata.pontocerto.model.Feriado;
 import com.mobdata.pontocerto.model.Setor;
 import com.mobdata.pontocerto.model.Usuario;
+import com.mobdata.pontocerto.repository.AfastamentoRepository;
 import com.mobdata.pontocerto.repository.AlocacaoRepository;
+import com.mobdata.pontocerto.repository.FeriadoRepository;
 import com.mobdata.pontocerto.repository.UsuarioRepository;
 import com.mobdata.pontocerto.security.TenantContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -34,6 +41,12 @@ public class AlocacaoService {
     @Autowired
     private EscalaService escalaService; // idem, para escala
 
+    @Autowired
+    private FeriadoRepository feriadoRepository;
+
+    @Autowired
+    private AfastamentoRepository afastamentoRepository;
+
     public Alocacao alocar(AlocacaoRequestDTO request) {
         Usuario usuario = usuarioRepository.findById(request.usuarioId())
                 .orElseThrow(() -> new IllegalArgumentException("Funcionário não encontrado"));
@@ -41,13 +54,7 @@ public class AlocacaoService {
         Setor setor = setorService.buscarPorId(request.setorId()); // já valida empresa
         Escala escala = escalaService.buscarPorId(request.escalaId()); // já valida empresa
 
-        if (usuario.getEmpresa() == null || !usuario.getEmpresa().getId().equals(setor.getEmpresa().getId())) {
-            throw new IllegalArgumentException("Funcionário e setor pertencem a empresas diferentes");
-        }
-
-        if (!setor.getEmpresa().getId().equals(escala.getEmpresa().getId())) {
-            throw new IllegalArgumentException("Setor e escala pertencem a empresas diferentes");
-        }
+        validarMesmaEmpresa(usuario, setor, escala);
 
         if (request.dataFim().isBefore(request.dataInicio())) {
             throw new IllegalArgumentException("Data de fim não pode ser anterior à data de início");
@@ -55,14 +62,7 @@ public class AlocacaoService {
 
         validarSemConflito(usuario, escala, request.dataInicio(), request.dataFim());
 
-        Alocacao alocacao = new Alocacao();
-        alocacao.setUsuario(usuario);
-        alocacao.setSetor(setor);
-        alocacao.setEscala(escala);
-        alocacao.setDataInicio(request.dataInicio());
-        alocacao.setDataFim(request.dataFim());
-
-        return alocacaoRepository.save(alocacao);
+        return salvarNova(usuario, setor, escala, request.dataInicio(), request.dataFim());
     }
 
     public Alocacao encerrar(UUID alocacaoId, LocalDate dataFim) {
@@ -73,6 +73,67 @@ public class AlocacaoService {
 
         alocacao.setDataFim(dataFim);
         return alocacaoRepository.save(alocacao);
+    }
+
+    /**
+     * Troca de escala (e, se quiser, de setor) no meio de uma alocação.
+     * A alocação atual é ENCERRADA no dia anterior à troca — nunca apagada —
+     * e uma nova começa na data da troca. Assim o histórico fica completo e o
+     * passado não muda: o espelho de antes da troca segue usando a escala
+     * antiga. Tudo numa transação: se a nova alocação for recusada (conflito
+     * de horário), o encerramento da antiga é desfeito junto.
+     */
+    @Transactional
+    public TrocaEscalaResponseDTO trocarEscala(UUID alocacaoId, TrocaEscalaRequestDTO request) {
+        Alocacao atual = alocacaoRepository.findById(alocacaoId)
+                .orElseThrow(() -> new IllegalArgumentException("Alocação não encontrada"));
+
+        setorService.buscarPorId(atual.getSetor().getId()); // garante acesso
+
+        LocalDate dataTroca = request.dataTroca();
+
+        if (dataTroca.isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("A troca só vale de hoje em diante: o passado não muda");
+        }
+        if (!dataTroca.isAfter(atual.getDataInicio())) {
+            throw new IllegalArgumentException(
+                    "A troca precisa ser depois do início da alocação atual (" + atual.getDataInicio() + ")");
+        }
+        if (dataTroca.isAfter(atual.getDataFim())) {
+            throw new IllegalArgumentException(
+                    "A alocação atual termina em " + atual.getDataFim()
+                            + ", antes da data da troca. Crie uma nova alocação em vez de trocar");
+        }
+
+        LocalDate novoFim = request.dataFim() != null ? request.dataFim() : atual.getDataFim();
+        if (novoFim.isBefore(dataTroca)) {
+            throw new IllegalArgumentException("Data de fim não pode ser anterior à data da troca");
+        }
+
+        Usuario usuario = atual.getUsuario();
+        Setor setor = request.setorId() != null
+                ? setorService.buscarPorId(request.setorId()) // já valida empresa
+                : atual.getSetor();
+        Escala escala = escalaService.buscarPorId(request.escalaId()); // já valida empresa
+
+        validarMesmaEmpresa(usuario, setor, escala);
+
+        if (request.escalaId().equals(atual.getEscala().getId()) && setor.getId().equals(atual.getSetor().getId())) {
+            throw new IllegalArgumentException("Escolha uma escala ou um setor diferente do atual");
+        }
+
+        // Encerra a atual ANTES de checar conflito: dali em diante ela já não ocupa o período
+        atual.setDataFim(dataTroca.minusDays(1));
+        alocacaoRepository.save(atual);
+
+        validarSemConflito(usuario, escala, dataTroca, novoFim);
+
+        Alocacao nova = salvarNova(usuario, setor, escala, dataTroca, novoFim);
+
+        return new TrocaEscalaResponseDTO(
+                AlocacaoResponseDTO.fromEntity(atual),
+                AlocacaoResponseDTO.fromEntity(nova)
+        );
     }
 
     public List<AlocacaoResponseDTO> historicoDoFuncionario(UUID usuarioId) {
@@ -95,11 +156,19 @@ public class AlocacaoService {
     /**
      * Agenda do funcionário no período: os turnos previstos, de todas as
      * alocações (em qualquer setor/escala) que tocam o intervalo pedido.
+     * Dia de feriado (da empresa ou do setor da alocação) e dia de
+     * afastamento não têm turno previsto, então não aparecem aqui.
      */
     public List<AgendaTurnoDTO> agenda(UUID usuarioId, LocalDate dataInicio, LocalDate dataFim) {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new IllegalArgumentException("Funcionário não encontrado"));
         verificarAcessoAoUsuario(usuario);
+
+        List<Afastamento> afastamentos = afastamentoRepository.findSobrepostos(usuarioId, dataInicio, dataFim);
+        List<Feriado> feriados = usuario.getEmpresa() == null
+                ? List.of()
+                : feriadoRepository.findAllByEmpresaIdAndDataBetweenOrderByDataAsc(
+                        usuario.getEmpresa().getId(), dataInicio, dataFim);
 
         List<AgendaTurnoDTO> agenda = new ArrayList<>();
 
@@ -111,6 +180,10 @@ public class AlocacaoService {
             }
 
             for (EscalaCalculo.PeriodoTurno periodo : EscalaCalculo.projetarTurnos(alocacao.getEscala(), inicio, fim)) {
+                if (DispensaCalculo.dispensado(afastamentos, feriados, alocacao.getSetor(), periodo.inicio().toLocalDate())) {
+                    continue;
+                }
+
                 agenda.add(new AgendaTurnoDTO(
                         periodo.inicio().toLocalDate(),
                         periodo.inicio().toLocalTime(),
@@ -126,6 +199,27 @@ public class AlocacaoService {
 
         agenda.sort(Comparator.comparing(AgendaTurnoDTO::data).thenComparing(AgendaTurnoDTO::horaInicio));
         return agenda;
+    }
+
+    private void validarMesmaEmpresa(Usuario usuario, Setor setor, Escala escala) {
+        if (usuario.getEmpresa() == null || !usuario.getEmpresa().getId().equals(setor.getEmpresa().getId())) {
+            throw new IllegalArgumentException("Funcionário e setor pertencem a empresas diferentes");
+        }
+
+        if (!setor.getEmpresa().getId().equals(escala.getEmpresa().getId())) {
+            throw new IllegalArgumentException("Setor e escala pertencem a empresas diferentes");
+        }
+    }
+
+    private Alocacao salvarNova(Usuario usuario, Setor setor, Escala escala, LocalDate dataInicio, LocalDate dataFim) {
+        Alocacao alocacao = new Alocacao();
+        alocacao.setUsuario(usuario);
+        alocacao.setSetor(setor);
+        alocacao.setEscala(escala);
+        alocacao.setDataInicio(dataInicio);
+        alocacao.setDataFim(dataFim);
+
+        return alocacaoRepository.save(alocacao);
     }
 
     /**
