@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +28,9 @@ public class AuthService {
 
     @Autowired
     private AlocacaoRepository alocacaoRepository;
+
+    @Autowired
+    private PreferenciaUsuarioService preferenciaUsuarioService;
 
     public LoginResponseDTO login(LoginRequestDTO request) {
         Usuario usuario = usuarioRepository.findByUsuario(request.usuario())
@@ -47,17 +51,21 @@ public class AuthService {
                 usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null,
                 usuario.getPerfil()
         );
+        LocalDate hoje = LocalDate.now();
         List<UUID> setoresIds = alocacaoRepository.findAllByUsuarioId(usuario.getId()).stream()
-                .filter(a -> a.getDataFim() == null) // só alocações ainda ativas
+                .filter(a -> !a.getDataFim().isBefore(hoje)) // só alocações ainda ativas hoje
                 .map(a -> a.getSetor().getId())
                 .toList();
+
+        var tema = preferenciaUsuarioService.obterTema(usuario.getId());
 
         return new LoginResponseDTO(
                 token,
                 usuario.getNome(),
                 usuario.getPerfil(),
                 usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null,
-                setoresIds
+                setoresIds,
+                tema
         );
     }
 }
