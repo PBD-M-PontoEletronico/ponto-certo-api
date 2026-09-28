@@ -27,6 +27,9 @@ public class AuthService {
     private JwtService jwtService;
 
     @Autowired
+    private DispositivoService dispositivoService;
+
+    @Autowired
     private AlocacaoRepository alocacaoRepository;
 
     @Autowired
@@ -44,6 +47,8 @@ public class AuthService {
         if (usuario.getEmpresa() != null && !usuario.getEmpresa().isAtiva()) {
             throw new CredenciaisInvalidasException("Usuário ou senha inválidos");
         }
+
+        dispositivoService.vincular(usuario.getId(), request.identificadorDispositivo());
 
         String token = jwtService.gerarToken(
                 usuario.getId(),

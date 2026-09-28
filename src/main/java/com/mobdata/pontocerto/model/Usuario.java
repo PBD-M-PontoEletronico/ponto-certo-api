@@ -44,4 +44,10 @@ public class Usuario {
 
     @Column(name = "cargo")
     private String cargo;
+
+    // Só usado/obrigatório quando perfil == USUARIO_SETOR — é a conta operada
+    // no relógio físico instalado neste setor.
+    @ManyToOne
+    @JoinColumn(name = "setor_id", nullable = true)
+    private Setor setor;
 }

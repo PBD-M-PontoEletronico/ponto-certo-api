@@ -6,6 +6,7 @@ public record LoginRequestDTO(
         @NotBlank(message = "Usuário é obrigatório")
         String usuario,
         @NotBlank(message = "Senha é obrigatório")
-        String senha
+        String senha,
+        String identificadorDispositivo
 ) {
 }

@@ -12,7 +12,8 @@ public record UsuarioResponseDTO(
         Perfil perfil,
         UUID empresaId,
         String matricula,
-        String cargo
+        String cargo,
+        UUID setorId
 ) {
     public static UsuarioResponseDTO fromEntity(Usuario usuario) {
         return new UsuarioResponseDTO(
@@ -22,7 +23,8 @@ public record UsuarioResponseDTO(
                 usuario.getPerfil(),
                 usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null,
                 usuario.getMatricula(),
-                usuario.getCargo()
+                usuario.getCargo(),
+                usuario.getSetor() != null ? usuario.getSetor().getId() : null
         );
     }
 }
