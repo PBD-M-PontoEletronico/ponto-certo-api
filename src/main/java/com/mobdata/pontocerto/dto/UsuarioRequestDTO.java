@@ -19,8 +19,8 @@ public record UsuarioRequestDTO(
         Perfil perfil,
         UUID empresaId,
         // Só usados/obrigatórios quando perfil == FUNCIONARIO
-
         String matricula,
-        String cargo
+        String cargo,
+        UUID setorId
 ) {
 }

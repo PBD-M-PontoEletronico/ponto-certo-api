@@ -6,8 +6,10 @@ import com.mobdata.pontocerto.dto.UsuarioRequestDTO;
 import com.mobdata.pontocerto.dto.UsuarioResponseDTO;
 import com.mobdata.pontocerto.model.Empresa;
 import com.mobdata.pontocerto.model.Perfil;
+import com.mobdata.pontocerto.model.Setor;
 import com.mobdata.pontocerto.model.Usuario;
 import com.mobdata.pontocerto.repository.EmpresaRepository;
+import com.mobdata.pontocerto.repository.SetorRepository;
 import com.mobdata.pontocerto.repository.UsuarioRepository;
 import com.mobdata.pontocerto.security.TenantContext;
 import com.mobdata.pontocerto.specification.UsuarioSpecification;
@@ -29,6 +31,9 @@ public class UsuarioService {
 
     @Autowired
     private EmpresaRepository empresaRepository;
+
+    @Autowired
+    private SetorRepository setorRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -61,6 +66,18 @@ public class UsuarioService {
             }
         }
 
+        Setor setor = null;
+        if (request.perfil() == Perfil.USUARIO_SETOR) {
+            if (request.setorId() == null) {
+                throw new IllegalArgumentException("Setor é obrigatório para o perfil Usuário do setor");
+            }
+            setor = setorRepository.findById(request.setorId())
+                    .orElseThrow(() -> new IllegalArgumentException("Setor não encontrado"));
+            if (!setor.getEmpresa().getId().equals(empresa.getId())) {
+                throw new IllegalArgumentException("Setor não pertence à empresa informada");
+            }
+        }
+
         Usuario usuario = new Usuario();
         usuario.setNome(request.nome());
         usuario.setUsuario(request.usuario());
@@ -84,7 +101,7 @@ public class UsuarioService {
                 .map(u -> new UsuarioResponseDTO(
                         u.getId(), u.getNome(), u.getUsuario(), u.getPerfil(),
                         u.getEmpresa() != null ? u.getEmpresa().getId() : null,
-                        u.getMatricula(), u.getCargo()
+                        u.getMatricula(), u.getCargo(), u.getSetor() != null ? u.getSetor().getId() : null
                 ))
                 .toList();
     }
