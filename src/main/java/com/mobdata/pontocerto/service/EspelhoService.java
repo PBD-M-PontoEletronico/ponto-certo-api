@@ -51,8 +51,17 @@ public class EspelhoService {
                 .orElseThrow(() -> new IllegalArgumentException("Funcionário não encontrado"));
         verificarAcessoAoUsuario(usuario);
 
-        LocalDate inicio = mes.atDay(1);
-        LocalDate fim = mes.atEndOfMonth();
+        return agendaDoPeriodo(usuario, mes.atDay(1), mes.atEndOfMonth());
+    }
+
+    /**
+     * Mesmo cálculo do espelho, para um intervalo qualquer [inicio, fim]
+     * (inclusive). Não checa permissão: quem chama já deve ter garantido que
+     * pode ver esse funcionário (ex.: a abertura usa o próprio usuário logado).
+     */
+    @Transactional(readOnly = true)
+    public List<EspelhoDiaDTO> agendaDoPeriodo(Usuario usuario, LocalDate inicio, LocalDate fim) {
+        UUID usuarioId = usuario.getId();
 
         List<Alocacao> alocacoes = alocacaoRepository.findAllByUsuarioId(usuarioId);
         List<Afastamento> afastamentos = afastamentoRepository.findSobrepostos(usuarioId, inicio, fim);
