@@ -64,6 +64,42 @@ public class Marcacao {
     @Column(name = "recebida_em", nullable = false)
     private Instant recebidaEm;
 
+    @ManyToOne
+    @JoinColumn(name = "dispositivo_id")
+    private Dispositivo dispositivo;
+
+    // Quem estava logado no aparelho — igual a "usuario" no celular pessoal;
+    // é a conta USUARIO_SETOR do tablet, no caso do relógio de setor.
+    @ManyToOne
+    @JoinColumn(name = "registrado_por_id")
+    private Usuario registradoPor;
+
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "metodo_confirmacao")
+    private MetodoConfirmacao metodoConfirmacao;
+
+    // Confirmação (senha + foto/digital) acontece no aparelho, inclusive
+    // offline — aqui só guardamos a evidência que sobrou (a foto, quando o
+    // método foi FOTO). O arquivo fica em disco, igual ao Afastamento.
+    @Column(name = "selfie_arquivo")
+    private String selfieArquivo;
+
+    @Column(name = "selfie_tipo_conteudo")
+    private String selfieTipoConteudo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private StatusMarcacao status;
+
+    @Column(name = "motivo_recusa")
+    private String motivoRecusa;
+
     /** Hora real do toque: a do aparelho descontado o desvio do relógio. */
     public Instant getHoraCorrigida() {
         if (horaAparelho == null) {
