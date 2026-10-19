@@ -84,8 +84,9 @@ public class UsuarioService {
         usuario.setSenhaHash(passwordEncoder.encode(request.senha()));
         usuario.setPerfil(request.perfil());
         usuario.setEmpresa(empresa);
-        usuario.setMatricula(request.matricula()); // NOVO
+        usuario.setMatricula(request.matricula());
         usuario.setCargo(request.cargo());
+        usuario.setSetor(setor);
 
         return usuarioRepository.save(usuario);
     }

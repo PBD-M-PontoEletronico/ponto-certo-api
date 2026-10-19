@@ -106,4 +106,18 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
+
+    // Dispositivo não registrado, ou tentando marcar em nome de outra pessoa/setor -> 403 Forbidden
+    @ExceptionHandler(MarcacaoRecusadaException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMarcacaoRecusada(MarcacaoRecusadaException ex) {
+        ErrorResponseDTO response = new ErrorResponseDTO(
+                ex.getMessage(),
+                null,
+                HttpStatus.FORBIDDEN.value(),
+                LocalDateTime.now(),
+                null
+        );
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    }
 }
