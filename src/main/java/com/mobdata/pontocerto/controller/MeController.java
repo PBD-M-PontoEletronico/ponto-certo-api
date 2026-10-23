@@ -42,10 +42,11 @@ public class MeController {
      * Ex.: GET /me/abertura?dias=14  (dias de agenda à frente; padrão 14, máx. 45)
      */
     @GetMapping("/me/abertura")
-    public ResponseEntity<AberturaResponseDTO> abertura(@RequestParam(required = false) Integer dias) {
-        AberturaResponseDTO abertura = aberturaService.montar(TenantContext.getUsuarioId(), dias);
-        // Sem cache: uma resposta guardada traria uma hora do servidor velha
-        // e o desvio do relógio calculado no app sairia errado.
+    public ResponseEntity<AberturaResponseDTO> abertura(
+            @RequestParam(required = false) Integer dias,
+            @RequestParam String identificadorDispositivo
+    ) {
+        AberturaResponseDTO abertura = aberturaService.montar(TenantContext.getUsuarioId(), dias, identificadorDispositivo);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(abertura);

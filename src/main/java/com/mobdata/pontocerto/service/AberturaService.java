@@ -4,14 +4,19 @@ import com.mobdata.pontocerto.dto.AberturaResponseDTO;
 import com.mobdata.pontocerto.dto.AberturaResponseDTO.AlocacaoDTO;
 import com.mobdata.pontocerto.dto.AberturaResponseDTO.EscalaDTO;
 import com.mobdata.pontocerto.dto.AberturaResponseDTO.FuncionarioDTO;
+import com.mobdata.pontocerto.dto.AberturaResponseDTO.FuncionarioResumoDTO;
 import com.mobdata.pontocerto.dto.AberturaResponseDTO.MarcacaoRecenteDTO;
 import com.mobdata.pontocerto.dto.AberturaResponseDTO.SetorDTO;
 import com.mobdata.pontocerto.dto.EspelhoDiaDTO;
+import com.mobdata.pontocerto.exception.DispositivoNaoRegistradoException;
 import com.mobdata.pontocerto.model.Alocacao;
 import com.mobdata.pontocerto.model.Escala;
+import com.mobdata.pontocerto.model.ModoAberturaDispositivo;
+import com.mobdata.pontocerto.model.Perfil;
 import com.mobdata.pontocerto.model.Setor;
 import com.mobdata.pontocerto.model.Usuario;
 import com.mobdata.pontocerto.repository.AlocacaoRepository;
+import com.mobdata.pontocerto.repository.DispositivoRepository;
 import com.mobdata.pontocerto.repository.MarcacaoRepository;
 import com.mobdata.pontocerto.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,22 +37,17 @@ import java.util.UUID;
  * W08 — Abertura do aplicativo.
  *
  * Junta, numa resposta só, o que o aparelho precisa guardar para bater ponto
- * sem rede: dados do funcionário, setores (com localização e política),
- * escalas com turnos, agenda dia a dia do período, marcações recentes e a hora
- * do servidor (para o app calcular o desvio do próprio relógio).
+ * sem rede: dados do funcionário (ou, no modo relógio de setor, a lista de
+ * funcionários do setor), setores, escalas com turnos, agenda dia a dia do
+ * período, marcações recentes e a hora do servidor.
  */
 @Service
 public class AberturaService {
 
-    /** Dias de agenda à frente quando o app não informa. */
     public static final int DIAS_PADRAO = 14;
-    /** Limite de dias à frente, para a resposta não ficar enorme. */
     public static final int DIAS_MAXIMO = 45;
-    /** Quantos dias para trás entram nas marcações recentes. */
     public static final int DIAS_MARCACOES_RECENTES = 7;
 
-    // Fuso usado para decidir o que é "hoje". O servidor de produção (Render)
-    // roda em UTC; sem isso, depois das 21h daqui o "hoje" já seria amanhã.
     public static final ZoneId FUSO = ZoneId.of("America/Recife");
 
     @Autowired
@@ -60,9 +60,11 @@ public class AberturaService {
     private MarcacaoRepository marcacaoRepository;
 
     @Autowired
+    private DispositivoRepository dispositivoRepository;
+
+    @Autowired
     private EspelhoService espelhoService;
 
-    // Trocável nos testes para fixar "agora".
     private Clock clock = Clock.system(FUSO);
 
     void setClock(Clock clock) {
@@ -70,24 +72,36 @@ public class AberturaService {
     }
 
     @Transactional(readOnly = true)
-    public AberturaResponseDTO montar(UUID usuarioId, Integer dias) {
+    public AberturaResponseDTO montar(UUID usuarioId, Integer dias, String identificadorDispositivo) {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new IllegalArgumentException("Funcionário não encontrado"));
 
-        int diasAFrente = normalizarDias(dias);
+        // Item 6: a chamada só é aceita vindo do dispositivo ativo dessa conta.
+        dispositivoRepository.findByUsuarioIdAndAtivoTrue(usuarioId)
+                .filter(d -> d.getIdentificador().equals(identificadorDispositivo))
+                .orElseThrow(() -> new DispositivoNaoRegistradoException(
+                        "Dispositivo não registrado ou não é mais o ativo"));
+
         LocalDate hoje = LocalDate.now(clock);
+        int diasAFrente = normalizarDias(dias);
         // Começa em "ontem" para pegar o turno da noite que ainda está rolando
         // depois da meia-noite (ex.: 22h–06h iniciado ontem).
         LocalDate inicio = hoje.minusDays(1);
         LocalDate fim = hoje.plusDays(diasAFrente);
+        Instant agora = clock.instant();
 
-        // Alocações que tocam o período (as antigas/futuras fora dele não interessam)
-        List<Alocacao> alocacoes = alocacaoRepository.findAllByUsuarioId(usuarioId).stream()
+        if (usuario.getPerfil() == Perfil.USUARIO_SETOR) {
+            return montarModoRelogio(usuario, hoje, inicio, fim, agora);
+        }
+        return montarModoPessoal(usuario, inicio, fim, agora);
+    }
+
+    private AberturaResponseDTO montarModoPessoal(Usuario usuario, LocalDate inicio, LocalDate fim, Instant agora) {
+        List<Alocacao> alocacoes = alocacaoRepository.findAllByUsuarioId(usuario.getId()).stream()
                 .filter(a -> !a.getDataFim().isBefore(inicio) && !a.getDataInicio().isAfter(fim))
                 .sorted(Comparator.comparing(Alocacao::getDataInicio))
                 .toList();
 
-        // Setores e escalas sem repetição (mesmo setor pode aparecer em 2 alocações)
         Map<UUID, Setor> setores = new LinkedHashMap<>();
         Map<UUID, Escala> escalas = new LinkedHashMap<>();
         for (Alocacao a : alocacoes) {
@@ -97,24 +111,19 @@ public class AberturaService {
 
         List<EspelhoDiaDTO> agenda = espelhoService.agendaDoPeriodo(usuario, inicio, fim);
 
+        LocalDate hoje = LocalDate.now(clock);
         Instant desde = hoje.minusDays(DIAS_MARCACOES_RECENTES).atStartOfDay(FUSO).toInstant();
         List<MarcacaoRecenteDTO> marcacoes = marcacaoRepository
-                .findTop100ByUsuarioIdAndHoraAparelhoGreaterThanEqualOrderByHoraAparelhoDesc(usuarioId, desde)
+                .findTop100ByUsuarioIdAndHoraAparelhoGreaterThanEqualOrderByHoraAparelhoDesc(usuario.getId(), desde)
                 .stream()
                 .map(MarcacaoRecenteDTO::fromEntity)
                 .toList();
 
-        // A hora do servidor é lida por último, o mais perto possível do envio,
-        // para o desvio calculado no app ser o mais fiel possível.
-        Instant agora = clock.instant();
-
         return new AberturaResponseDTO(
-                agora,
-                agora.toEpochMilli(),
-                FUSO.getId(),
-                inicio,
-                fim,
+                agora, agora.toEpochMilli(), FUSO.getId(), inicio, fim,
+                ModoAberturaDispositivo.PESSOAL,
                 FuncionarioDTO.fromEntity(usuario),
+                List.of(),
                 setores.values().stream()
                         .sorted(Comparator.comparing(Setor::getNome, String.CASE_INSENSITIVE_ORDER))
                         .map(SetorDTO::fromEntity)
@@ -123,6 +132,38 @@ public class AberturaService {
                 alocacoes.stream().map(AlocacaoDTO::fromEntity).toList(),
                 agenda,
                 marcacoes
+        );
+    }
+
+    private AberturaResponseDTO montarModoRelogio(Usuario contaRelogio, LocalDate hoje, LocalDate inicio,
+                                                  LocalDate fim, Instant agora) {
+        Setor setor = contaRelogio.getSetor();
+        if (setor == null) {
+            throw new IllegalArgumentException("Esta conta de setor não está vinculada a nenhum setor");
+        }
+
+        List<UUID> idsFuncionarios = alocacaoRepository
+                .findAllBySetorIdAndDataFimGreaterThanEqual(setor.getId(), hoje).stream()
+                .filter(a -> !a.getDataInicio().isAfter(hoje))
+                .map(a -> a.getUsuario().getId())
+                .distinct()
+                .toList();
+
+        List<FuncionarioResumoDTO> funcionarios = usuarioRepository.findAllById(idsFuncionarios).stream()
+                .map(FuncionarioResumoDTO::fromEntity)
+                .sorted(Comparator.comparing(FuncionarioResumoDTO::nome, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+
+        return new AberturaResponseDTO(
+                agora, agora.toEpochMilli(), FUSO.getId(), inicio, fim,
+                ModoAberturaDispositivo.RELOGIO_SETOR,
+                null,
+                funcionarios,
+                List.of(SetorDTO.fromEntity(setor)),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of()
         );
     }
 
