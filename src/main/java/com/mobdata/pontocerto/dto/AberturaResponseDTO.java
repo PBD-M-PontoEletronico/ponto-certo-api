@@ -4,6 +4,7 @@ import com.mobdata.pontocerto.model.Alocacao;
 import com.mobdata.pontocerto.model.Escala;
 import com.mobdata.pontocerto.model.Marcacao;
 import com.mobdata.pontocerto.model.ModelEscala;
+import com.mobdata.pontocerto.model.ModoAberturaDispositivo;
 import com.mobdata.pontocerto.model.Perfil;
 import com.mobdata.pontocerto.model.PoliticaForaPerimetro;
 import com.mobdata.pontocerto.model.Setor;
@@ -24,10 +25,12 @@ import java.util.UUID;
  * Pacote de abertura (W08): tudo o que o aparelho precisa guardar para poder
  * bater ponto sem rede, numa resposta só (GET /me/abertura).
  *
- * horaServidor / horaServidorEpochMs: hora do servidor no momento da resposta.
- * O app usa para calcular o desvio do próprio relógio:
- *     desvioRelogioMs = horaDoAparelho - horaServidorEpochMs
- * e envia esse número junto com toda marcação feita offline.
+ * "modo" distingue os dois formatos possíveis:
+ * - PESSOAL: "funcionario" vem preenchido, "funcionarios" vem vazio.
+ * - RELOGIO_SETOR: "funcionario" vem nulo, "funcionarios" traz a lista de
+ *   todos os funcionários alocados no setor daquela conta — e escalas,
+ *   alocacoes, agenda e marcacoesRecentes vêm vazios (não fazem sentido numa
+ *   tela compartilhada por várias pessoas).
  */
 public record AberturaResponseDTO(
         Instant horaServidor,
@@ -35,7 +38,9 @@ public record AberturaResponseDTO(
         String fusoHorario,
         LocalDate periodoInicio,
         LocalDate periodoFim,
+        ModoAberturaDispositivo modo,
         FuncionarioDTO funcionario,
+        List<FuncionarioResumoDTO> funcionarios,
         List<SetorDTO> setores,
         List<EscalaDTO> escalas,
         List<AlocacaoDTO> alocacoes,
@@ -64,6 +69,17 @@ public record AberturaResponseDTO(
                     u.getEmpresa() != null ? u.getEmpresa().getId() : null,
                     u.getEmpresa() != null ? u.getEmpresa().getRazaoSocial() : null
             );
+        }
+    }
+
+    /** Versão enxuta do funcionário, usada na lista do modo relógio de setor. */
+    public record FuncionarioResumoDTO(
+            UUID id,
+            String nome,
+            String matricula
+    ) {
+        public static FuncionarioResumoDTO fromEntity(Usuario u) {
+            return new FuncionarioResumoDTO(u.getId(), u.getNome(), u.getMatricula());
         }
     }
 

@@ -120,4 +120,13 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
+
+    // Aparelho não é o dispositivo ativo da conta -> 403 Forbidden
+    @ExceptionHandler(DispositivoNaoRegistradoException.class)
+    public ResponseEntity<ErrorResponseDTO> handleDispositivoNaoRegistrado(DispositivoNaoRegistradoException ex) {
+        ErrorResponseDTO response = new ErrorResponseDTO(
+                ex.getMessage(), null, HttpStatus.FORBIDDEN.value(), LocalDateTime.now(), null
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    }
 }
