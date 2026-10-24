@@ -1,5 +1,7 @@
 package com.mobdata.pontocerto.service;
 
+import com.mobdata.pontocerto.dto.PaginaDTO;
+import com.mobdata.pontocerto.dto.SetorFiltroDTO;
 import com.mobdata.pontocerto.dto.SetorRequestDTO;
 import com.mobdata.pontocerto.model.Empresa;
 import com.mobdata.pontocerto.model.Setor;
@@ -7,8 +9,12 @@ import com.mobdata.pontocerto.repository.AlocacaoRepository;
 import com.mobdata.pontocerto.repository.EmpresaRepository;
 import com.mobdata.pontocerto.repository.SetorRepository;
 import com.mobdata.pontocerto.security.TenantContext;
+import com.mobdata.pontocerto.specification.SetorSpecification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -96,5 +102,22 @@ public class SetorService {
         if (empresaId == null || !setor.getEmpresa().getId().equals(empresaId)) {
             throw new IllegalArgumentException("Setor não encontrado");
         }
+    }
+
+    public PaginaDTO<Setor> buscar(SetorFiltroDTO filtro, Pageable pageable) {
+        UUID empresaId = TenantContext.isSuperAdmin() ? filtro.empresaId() : TenantContext.getEmpresaId();
+
+        if (empresaId == null) {
+            throw new IllegalArgumentException("Informe a empresa (empresaId) para buscar os setores");
+        }
+
+        Specification<Setor> spec = Specification
+                .where(SetorSpecification.comNome(filtro.nome()))
+                .and(SetorSpecification.comEmpresaId(empresaId))
+                .and(SetorSpecification.comExigirSelfie(filtro.exigirSelfie()))
+                .and(SetorSpecification.comIgnorarLocalizacao(filtro.ignorarLocalizacao()))
+                .and(SetorSpecification.comPoliticaForaPerimetro(filtro.politicaForaPerimetro()));
+
+        return PaginaDTO.fromPage(setorRepository.findAll(spec, pageable));
     }
 }
