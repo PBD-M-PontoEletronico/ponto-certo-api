@@ -3,6 +3,7 @@ package com.mobdata.pontocerto.exception;
 import com.mobdata.pontocerto.dto.ErrorResponseDTO;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -88,6 +89,21 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(response);
+    }
+
+    // Duas pessoas salvando o mesmo registro ao mesmo tempo (ex.: dois gestores
+    // aprovando o mesmo pedido) -> 409 Conflict
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponseDTO> handleConcorrencia(ObjectOptimisticLockingFailureException ex) {
+        ErrorResponseDTO response = new ErrorResponseDTO(
+                "Este registro acabou de ser alterado por outra pessoa. Atualize a tela e tente de novo.",
+                null,
+                HttpStatus.CONFLICT.value(),
+                LocalDateTime.now(),
+                null
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
     // Qualquer outro erro não previsto -> 500 Internal Server Error

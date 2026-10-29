@@ -14,4 +14,8 @@ public interface MarcacaoRepository extends JpaRepository<Marcacao, UUID>, JpaSp
     // (limitadas a 100 para a abertura não crescer sem controle).
     List<Marcacao> findTop100ByUsuarioIdAndHoraAparelhoGreaterThanEqualOrderByHoraAparelhoDesc(
             UUID usuarioId, Instant desde);
+
+    // Marcações do funcionário numa janela de tempo (espelho e análise de pedido).
+    List<Marcacao> findAllByUsuarioIdAndHoraAparelhoBetweenOrderByHoraAparelhoAsc(
+            UUID usuarioId, Instant inicio, Instant fim);
 }

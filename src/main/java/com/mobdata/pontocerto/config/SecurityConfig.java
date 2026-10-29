@@ -59,6 +59,14 @@ public class SecurityConfig {
                         .requestMatchers("/alocacoes/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .requestMatchers("/feriados/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .requestMatchers("/afastamentos/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
+                        .requestMatchers("/fechamentos/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
+                        // W10 — pedidos: o funcionário cria e acompanha os dele; a fila,
+                        // o contexto e a análise são do gestor/RH. Ver/baixar um pedido
+                        // específico o service libera para o dono ou para a empresa.
+                        .requestMatchers(HttpMethod.POST, "/solicitacoes").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/solicitacoes/minhas").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/solicitacoes/*", "/solicitacoes/*/anexo").authenticated()
+                        .requestMatchers("/solicitacoes/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN", "GESTOR")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint()))
