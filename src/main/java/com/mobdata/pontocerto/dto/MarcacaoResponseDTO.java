@@ -28,7 +28,10 @@ public record MarcacaoResponseDTO(
         MetodoConfirmacao metodoConfirmacao,
         boolean temSelfie,
         StatusMarcacao status,
-        String motivoRecusa
+        String motivoRecusa,
+        // W10 — marcação criada por ajuste aprovado (nulo = batida no aparelho)
+        boolean ajuste,
+        UUID solicitacaoId
 ) {
     public static MarcacaoResponseDTO fromEntity(Marcacao m) {
         var usuario = m.getUsuario();
@@ -54,7 +57,9 @@ public record MarcacaoResponseDTO(
                 m.getMetodoConfirmacao(),
                 m.getSelfieArquivo() != null,
                 m.getStatus(),
-                m.getMotivoRecusa()
+                m.getMotivoRecusa(),
+                m.isAjuste(),
+                m.getSolicitacao() != null ? m.getSolicitacao().getId() : null
         );
     }
 }

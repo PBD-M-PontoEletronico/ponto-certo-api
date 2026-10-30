@@ -13,8 +13,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Guarda os anexos de afastamento em disco (pasta configurada em
- * pontocerto.uploads-dir). O arquivo é salvo com nome gerado pelo servidor
+ * Guarda anexos em disco (pasta configurada em pontocerto.uploads-dir), uma
+ * subpasta por categoria: "afastamentos" (padrão) e "solicitacoes" (W10,
+ * atestados de justificativa). O arquivo é salvo com nome gerado pelo servidor
  * (UUID + extensão), nunca com o nome enviado pelo usuário — isso evita
  * sobrescrever arquivos e "path traversal" (nome tipo ../../algo).
  */
@@ -29,13 +30,30 @@ public class AnexoStorageService {
             "image/jpeg", "jpg"
     );
 
-    private final Path pasta;
+    public static final String AFASTAMENTOS = "afastamentos";
+    public static final String SOLICITACOES = "solicitacoes";
+
+    private final Path base;
 
     public AnexoStorageService(@Value("${pontocerto.uploads-dir:uploads}") String pastaBase) {
-        this.pasta = Path.of(pastaBase, "afastamentos").toAbsolutePath().normalize();
+        this.base = Path.of(pastaBase).toAbsolutePath().normalize();
     }
 
+    // Métodos sem categoria: continuam salvando em "afastamentos", como antes.
     public AnexoSalvo salvar(MultipartFile arquivo) {
+        return salvar(arquivo, AFASTAMENTOS);
+    }
+
+    public byte[] ler(String nomeSalvo) {
+        return ler(nomeSalvo, AFASTAMENTOS);
+    }
+
+    public void remover(String nomeSalvo) {
+        remover(nomeSalvo, AFASTAMENTOS);
+    }
+
+    public AnexoSalvo salvar(MultipartFile arquivo, String categoria) {
+        Path pasta = pastaDa(categoria);
         if (arquivo.getSize() > TAMANHO_MAXIMO_BYTES) {
             throw new IllegalArgumentException("O anexo deve ter no máximo 5 MB");
         }
@@ -70,7 +88,8 @@ public class AnexoStorageService {
         return new AnexoSalvo(nomeSalvo, nomeOriginalSeguro(arquivo.getOriginalFilename(), extensao), tipo);
     }
 
-    public byte[] ler(String nomeSalvo) {
+    public byte[] ler(String nomeSalvo, String categoria) {
+        Path pasta = pastaDa(categoria);
         Path caminho = pasta.resolve(nomeSalvo).normalize();
         if (!caminho.startsWith(pasta)) {
             throw new IllegalArgumentException("Anexo não encontrado");
@@ -84,7 +103,8 @@ public class AnexoStorageService {
         }
     }
 
-    public void remover(String nomeSalvo) {
+    public void remover(String nomeSalvo, String categoria) {
+        Path pasta = pastaDa(categoria);
         try {
             Path caminho = pasta.resolve(nomeSalvo).normalize();
             if (caminho.startsWith(pasta)) {
@@ -93,6 +113,14 @@ public class AnexoStorageService {
         } catch (IOException ignorado) {
             // Sobrar um arquivo solto em disco não deve impedir a operação principal.
         }
+    }
+
+    // Só as categorias conhecidas — nunca um nome vindo do usuário.
+    private Path pastaDa(String categoria) {
+        if (!AFASTAMENTOS.equals(categoria) && !SOLICITACOES.equals(categoria)) {
+            throw new IllegalArgumentException("Categoria de anexo inválida");
+        }
+        return base.resolve(categoria);
     }
 
     private boolean assinaturaConfere(String extensao, byte[] b) {

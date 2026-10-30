@@ -100,6 +100,18 @@ public class Marcacao {
     @Column(name = "motivo_recusa")
     private String motivoRecusa;
 
+    // W10 — preenchido só nas marcações criadas pela aprovação de um pedido
+    // de AJUSTE. Nulo = marcação batida no aparelho (a "original").
+    // LAZY: as listagens só precisam do id, que o Hibernate já tem sem consulta extra.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "solicitacao_id")
+    private Solicitacao solicitacao;
+
+    /** true quando esta marcação nasceu de um ajuste aprovado. */
+    public boolean isAjuste() {
+        return solicitacao != null;
+    }
+
     /** Hora real do toque: a do aparelho descontado o desvio do relógio. */
     public Instant getHoraCorrigida() {
         if (horaAparelho == null) {

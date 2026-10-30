@@ -3,7 +3,9 @@ package com.mobdata.pontocerto.service;
 import com.mobdata.pontocerto.dto.AberturaResponseDTO;
 import com.mobdata.pontocerto.dto.EspelhoDiaDTO;
 import com.mobdata.pontocerto.dto.SituacaoDia;
+import com.mobdata.pontocerto.exception.DispositivoNaoRegistradoException;
 import com.mobdata.pontocerto.model.Alocacao;
+import com.mobdata.pontocerto.model.Dispositivo;
 import com.mobdata.pontocerto.model.Empresa;
 import com.mobdata.pontocerto.model.Escala;
 import com.mobdata.pontocerto.model.Marcacao;
@@ -11,11 +13,13 @@ import com.mobdata.pontocerto.model.ModelEscala;
 import com.mobdata.pontocerto.model.Perfil;
 import com.mobdata.pontocerto.model.PoliticaForaPerimetro;
 import com.mobdata.pontocerto.model.Setor;
+import com.mobdata.pontocerto.model.TipoDispositivo;
 import com.mobdata.pontocerto.model.TipoMarcacao;
 import com.mobdata.pontocerto.model.Turno;
 import com.mobdata.pontocerto.model.Usuario;
 import com.mobdata.pontocerto.repository.AfastamentoRepository;
 import com.mobdata.pontocerto.repository.AlocacaoRepository;
+import com.mobdata.pontocerto.repository.DispositivoRepository;
 import com.mobdata.pontocerto.repository.FeriadoRepository;
 import com.mobdata.pontocerto.repository.MarcacaoRepository;
 import com.mobdata.pontocerto.repository.UsuarioRepository;
@@ -50,11 +54,15 @@ class AberturaServiceTest {
             ZonedDateTime.of(2026, 10, 15, 10, 0, 0, 0, AberturaService.FUSO);
     private static final LocalDate HOJE = AGORA.toLocalDate();
 
+    // Identificador do aparelho ativo da conta (a abertura exige que bata)
+    private static final String APARELHO = "aparelho-da-maria";
+
     @Mock private UsuarioRepository usuarioRepository;
     @Mock private AlocacaoRepository alocacaoRepository;
     @Mock private MarcacaoRepository marcacaoRepository;
     @Mock private FeriadoRepository feriadoRepository;
     @Mock private AfastamentoRepository afastamentoRepository;
+    @Mock private DispositivoRepository dispositivoRepository;
 
     private AberturaService aberturaService;
     private Usuario usuario;
@@ -74,6 +82,7 @@ class AberturaServiceTest {
         ReflectionTestUtils.setField(aberturaService, "usuarioRepository", usuarioRepository);
         ReflectionTestUtils.setField(aberturaService, "alocacaoRepository", alocacaoRepository);
         ReflectionTestUtils.setField(aberturaService, "marcacaoRepository", marcacaoRepository);
+        ReflectionTestUtils.setField(aberturaService, "dispositivoRepository", dispositivoRepository);
         ReflectionTestUtils.setField(aberturaService, "espelhoService", espelhoService);
         aberturaService.setClock(Clock.fixed(AGORA.toInstant(), AberturaService.FUSO));
 
@@ -94,6 +103,15 @@ class AberturaServiceTest {
         escritorio = setor("Escritório", empresa);
 
         lenient().when(usuarioRepository.findById(usuario.getId())).thenReturn(Optional.of(usuario));
+
+        Dispositivo aparelho = new Dispositivo();
+        aparelho.setId(UUID.randomUUID());
+        aparelho.setTipo(TipoDispositivo.PESSOAL);
+        aparelho.setIdentificador(APARELHO);
+        aparelho.setUsuario(usuario);
+        aparelho.setAtivo(true);
+        lenient().when(dispositivoRepository.findByUsuarioIdAndAtivoTrue(usuario.getId()))
+                .thenReturn(Optional.of(aparelho));
     }
 
     private Setor setor(String nome, Empresa empresa) {
@@ -135,7 +153,7 @@ class AberturaServiceTest {
     void devolveHoraDoServidorEFuso() {
         when(alocacaoRepository.findAllByUsuarioId(usuario.getId())).thenReturn(List.of());
 
-        AberturaResponseDTO r = aberturaService.montar(usuario.getId(), null);
+        AberturaResponseDTO r = aberturaService.montar(usuario.getId(), null, APARELHO);
 
         assertThat(r.horaServidor()).isEqualTo(AGORA.toInstant());
         assertThat(r.horaServidorEpochMs()).isEqualTo(AGORA.toInstant().toEpochMilli());
@@ -146,15 +164,15 @@ class AberturaServiceTest {
     void periodoVaiDeOntemAteHojeMaisDias() {
         when(alocacaoRepository.findAllByUsuarioId(usuario.getId())).thenReturn(List.of());
 
-        AberturaResponseDTO padrao = aberturaService.montar(usuario.getId(), null);
+        AberturaResponseDTO padrao = aberturaService.montar(usuario.getId(), null, APARELHO);
         assertThat(padrao.periodoInicio()).isEqualTo(HOJE.minusDays(1));
         assertThat(padrao.periodoFim()).isEqualTo(HOJE.plusDays(AberturaService.DIAS_PADRAO));
         // um item de agenda por dia do período
         assertThat(padrao.agenda()).hasSize(AberturaService.DIAS_PADRAO + 2);
 
-        assertThat(aberturaService.montar(usuario.getId(), 500).periodoFim())
+        assertThat(aberturaService.montar(usuario.getId(), 500, APARELHO).periodoFim())
                 .isEqualTo(HOJE.plusDays(AberturaService.DIAS_MAXIMO));
-        assertThat(aberturaService.montar(usuario.getId(), 0).periodoFim())
+        assertThat(aberturaService.montar(usuario.getId(), 0, APARELHO).periodoFim())
                 .isEqualTo(HOJE.plusDays(1));
     }
 
@@ -171,7 +189,7 @@ class AberturaServiceTest {
                 alocacao(galpao, comercial, HOJE.plusDays(4), HOJE.plusDays(30))
         ));
 
-        AberturaResponseDTO r = aberturaService.montar(usuario.getId(), null);
+        AberturaResponseDTO r = aberturaService.montar(usuario.getId(), null, APARELHO);
 
         assertThat(r.funcionario().nome()).isEqualTo("Maria Silva");
         assertThat(r.funcionario().matricula()).isEqualTo("123");
@@ -199,7 +217,7 @@ class AberturaServiceTest {
                 alocacao(galpao, noturna, HOJE.minusDays(5), HOJE.plusDays(30))
         ));
 
-        AberturaResponseDTO r = aberturaService.montar(usuario.getId(), 3);
+        AberturaResponseDTO r = aberturaService.montar(usuario.getId(), 3, APARELHO);
 
         EspelhoDiaDTO ontem = r.agenda().get(0);
         assertThat(ontem.data()).isEqualTo(HOJE.minusDays(1));
@@ -229,7 +247,7 @@ class AberturaServiceTest {
         when(marcacaoRepository.findTop100ByUsuarioIdAndHoraAparelhoGreaterThanEqualOrderByHoraAparelhoDesc(
                 eq(usuario.getId()), eq(seteDiasAtras))).thenReturn(List.of(m));
 
-        AberturaResponseDTO r = aberturaService.montar(usuario.getId(), null);
+        AberturaResponseDTO r = aberturaService.montar(usuario.getId(), null, APARELHO);
 
         assertThat(r.marcacoesRecentes()).hasSize(1);
         assertThat(r.marcacoesRecentes().get(0).tipo()).isEqualTo(TipoMarcacao.ENTRADA);
@@ -242,7 +260,13 @@ class AberturaServiceTest {
         UUID qualquer = UUID.randomUUID();
         when(usuarioRepository.findById(any())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> aberturaService.montar(qualquer, null))
+        assertThatThrownBy(() -> aberturaService.montar(qualquer, null, APARELHO))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void aparelhoQueNaoEOAtivoDaContaERecusado() {
+        assertThatThrownBy(() -> aberturaService.montar(usuario.getId(), null, "outro-aparelho"))
+                .isInstanceOf(DispositivoNaoRegistradoException.class);
     }
 }
