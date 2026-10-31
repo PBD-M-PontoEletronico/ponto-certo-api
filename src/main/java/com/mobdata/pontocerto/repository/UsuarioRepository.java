@@ -1,5 +1,6 @@
 package com.mobdata.pontocerto.repository;
 
+import com.mobdata.pontocerto.model.Perfil;
 import com.mobdata.pontocerto.model.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -13,5 +14,7 @@ public interface UsuarioRepository extends JpaRepository<Usuario, UUID>, JpaSpec
     Optional<Usuario> findByUsuario(String usuario);
     List<Usuario> findAllByEmpresaId(UUID empresaId);
     boolean existsByMatriculaAndEmpresaId(String matricula, UUID empresaId);
+    boolean existsBySetorId(UUID setorId);
+    List<Usuario> findAllByEmpresaIdAndPerfil(UUID empresaId, Perfil perfil);
 }
 

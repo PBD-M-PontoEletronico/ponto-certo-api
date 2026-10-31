@@ -4,15 +4,11 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Um dia do espelho. "descricao" traz o motivo quando o dia é FERIADO
- * (nome do feriado) ou AFASTAMENTO (tipo). Nesses dois casos "turnos" vem
- * vazio: não há turno esperado, logo não há falta nem atraso.
- *
- * W10 — "marcacoes" traz o que aconteceu no dia: as batidas originais
- * (ajuste = false) e as criadas por ajuste aprovado (ajuste = true), para
- * mostrar lado a lado. "justificativas" traz as pendentes e as aprovadas.
- * Só o espelho do mês preenche essas listas; a agenda da abertura do app
- * manda as duas vazias.
+ * Um dia do espelho. "minutosTrabalhados"/"minutosAtraso"/"saldoDoDiaMinutos"
+ * ficam null quando o dia ainda está em andamento (bateu ENTRADA mas não
+ * SAIDA) — não dá pra fechar conta de um dia que a pessoa ainda não terminou.
+ * "saldoAcumuladoMinutos" é o banco de horas corrido até este dia, somando o
+ * saldo congelado do último mês fechado com os dias já calculados deste mês.
  */
 public record EspelhoDiaDTO(
         LocalDate data,
@@ -20,15 +16,26 @@ public record EspelhoDiaDTO(
         String descricao,
         List<EspelhoTurnoDTO> turnos,
         List<EspelhoMarcacaoDTO> marcacoes,
-        List<EspelhoJustificativaDTO> justificativas
+        List<EspelhoJustificativaDTO> justificativas,
+        int minutosPrevistos,
+        Integer minutosTrabalhados,
+        Integer minutosAtraso,
+        Integer saldoDoDiaMinutos,
+        int saldoAcumuladoMinutos
 ) {
-    // Construtor antigo (só a escala do dia) — continua valendo para quem
-    // não precisa das marcações, como a abertura do app.
-    public EspelhoDiaDTO(LocalDate data, SituacaoDia situacao, String descricao, List<EspelhoTurnoDTO> turnos) {
-        this(data, situacao, descricao, turnos, List.of(), List.of());
+    public EspelhoDiaDTO(LocalDate data, SituacaoDia situacao, String descricao,
+                         List<EspelhoTurnoDTO> turnos, int minutosPrevistos) {
+        this(data, situacao, descricao, turnos, List.of(), List.of(), minutosPrevistos, null, null, null, 0);
     }
 
     public EspelhoDiaDTO comRealizado(List<EspelhoMarcacaoDTO> marcacoes, List<EspelhoJustificativaDTO> justificativas) {
-        return new EspelhoDiaDTO(data, situacao, descricao, turnos, marcacoes, justificativas);
+        return new EspelhoDiaDTO(data, situacao, descricao, turnos, marcacoes, justificativas,
+                minutosPrevistos, minutosTrabalhados, minutosAtraso, saldoDoDiaMinutos, saldoAcumuladoMinutos);
+    }
+
+    public EspelhoDiaDTO comHoras(Integer minutosTrabalhados, Integer minutosAtraso,
+                                  Integer saldoDoDiaMinutos, int saldoAcumuladoMinutos) {
+        return new EspelhoDiaDTO(data, situacao, descricao, turnos, marcacoes, justificativas,
+                minutosPrevistos, minutosTrabalhados, minutosAtraso, saldoDoDiaMinutos, saldoAcumuladoMinutos);
     }
 }

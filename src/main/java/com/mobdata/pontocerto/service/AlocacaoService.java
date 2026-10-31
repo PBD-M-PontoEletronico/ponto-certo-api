@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -47,6 +48,9 @@ public class AlocacaoService {
     @Autowired
     private AfastamentoRepository afastamentoRepository;
 
+    @Autowired
+    private FechamentoService fechamentoService;
+
     public Alocacao alocar(AlocacaoRequestDTO request) {
         Usuario usuario = usuarioRepository.findById(request.usuarioId())
                 .orElseThrow(() -> new IllegalArgumentException("Funcionário não encontrado"));
@@ -70,6 +74,12 @@ public class AlocacaoService {
                 .orElseThrow(() -> new IllegalArgumentException("Alocação não encontrada"));
 
         setorService.buscarPorId(alocacao.getSetor().getId()); // garante acesso
+
+        if (dataFim.isBefore(alocacao.getDataInicio())) {
+            throw new IllegalArgumentException(
+                    "Data de encerramento não pode ser anterior ao início da alocação ("
+                            + alocacao.getDataInicio() + ")");
+        }
 
         alocacao.setDataFim(dataFim);
         return alocacaoRepository.save(alocacao);
@@ -270,6 +280,28 @@ public class AlocacaoService {
         if (empresaId == null || usuario.getEmpresa() == null || !usuario.getEmpresa().getId().equals(empresaId)) {
             throw new IllegalArgumentException("Funcionário não encontrado");
         }
+    }
+
+    @Transactional
+    public void excluir(UUID id) {
+        if (!TenantContext.isSuperAdmin()) {
+            throw new IllegalArgumentException("Apenas o superadmin pode excluir uma alocação");
+        }
+
+        Alocacao alocacao = alocacaoRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Alocação não encontrada"));
+
+        setorService.buscarPorId(alocacao.getSetor().getId()); // garante acesso
+
+        UUID empresaId = alocacao.getUsuario().getEmpresa().getId();
+        YearMonth mes = YearMonth.from(alocacao.getDataInicio());
+        YearMonth fim = YearMonth.from(alocacao.getDataFim());
+        while (!mes.isAfter(fim)) {
+            fechamentoService.exigirAberto(empresaId, mes.atDay(1), "Não é possível excluir esta alocação");
+            mes = mes.plusMonths(1);
+        }
+
+        alocacaoRepository.delete(alocacao);
     }
 
     private static LocalDate maior(LocalDate a, LocalDate b) {

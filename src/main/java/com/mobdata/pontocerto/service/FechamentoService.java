@@ -1,14 +1,14 @@
 package com.mobdata.pontocerto.service;
 
-import com.mobdata.pontocerto.dto.FechamentoRequestDTO;
-import com.mobdata.pontocerto.model.Empresa;
-import com.mobdata.pontocerto.model.FechamentoPeriodo;
-import com.mobdata.pontocerto.model.Usuario;
-import com.mobdata.pontocerto.repository.EmpresaRepository;
-import com.mobdata.pontocerto.repository.FechamentoPeriodoRepository;
-import com.mobdata.pontocerto.repository.UsuarioRepository;
+import com.mobdata.pontocerto.dto.*;
+import com.mobdata.pontocerto.model.*;
+import com.mobdata.pontocerto.repository.*;
 import com.mobdata.pontocerto.security.TenantContext;
+import com.mobdata.pontocerto.specification.FechamentoLogSpecification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +41,15 @@ public class FechamentoService {
     @Autowired
     private UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private SaldoFechamentoRepository  saldoFechamentoRepository;
+
+    @Autowired
+    private FechamentoLogRepository fechamentoLogRepository;
+
+    @Autowired
+    private EspelhoService espelhoService;
+
     public List<FechamentoPeriodo> listar(UUID empresaIdParam) {
         return fechamentoRepository.findAllByEmpresaIdOrderByAnoDescMesDesc(empresaDaRequisicao(empresaIdParam));
     }
@@ -71,20 +80,23 @@ public class FechamentoService {
         fechamento.setMes(mes.getMonthValue());
         fechamento.setFechadoEm(Instant.now());
         fechamento.setFechadoPor(quem);
-        return fechamentoRepository.save(fechamento);
-    }
+        FechamentoPeriodo salvo = fechamentoRepository.save(fechamento);
 
-    // Reabrir = apagar o registro de fechamento.
-    @Transactional
-    public void reabrir(UUID id) {
-        FechamentoPeriodo fechamento = fechamentoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Fechamento não encontrado"));
+        for (Usuario funcionario : usuarioRepository.findAllByEmpresaIdAndPerfil(empresaId, Perfil.FUNCIONARIO)) {
+            List<EspelhoDiaDTO> dias = espelhoService.espelhoDoMes(funcionario.getId(), mes);
+            long saldoFinal = dias.isEmpty() ? 0 : dias.get(dias.size() - 1).saldoAcumuladoMinutos();
 
-        if (!TenantContext.isSuperAdmin() && !fechamento.getEmpresa().getId().equals(TenantContext.getEmpresaId())) {
-            throw new IllegalArgumentException("Fechamento não encontrado");
+            SaldoFechamento snapshot = new SaldoFechamento();
+            snapshot.setUsuario(funcionario);
+            snapshot.setAnoMes(mes.getYear() * 100 + mes.getMonthValue());
+            snapshot.setSaldoAcumuladoMinutos(saldoFinal);
+            snapshot.setFechamento(salvo);
+            saldoFechamentoRepository.save(snapshot);
         }
-        fechamentoRepository.delete(fechamento);
+        registrarLog(empresa, mes.getYear(), mes.getMonthValue(), AcaoFechamento.FECHADO, quem);
+        return salvo;
     }
+
 
     public boolean estaFechado(UUID empresaId, LocalDate data) {
         return buscar(empresaId, data).isPresent();
@@ -118,6 +130,48 @@ public class FechamentoService {
             throw new IllegalArgumentException("Informe a empresa (empresaId)");
         }
         return empresaId;
+    }
+
+    @Transactional
+    public void reabrir(UUID id) {
+        FechamentoPeriodo fechamento = fechamentoRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Fechamento não encontrado"));
+
+        if (!TenantContext.isSuperAdmin() && !fechamento.getEmpresa().getId().equals(TenantContext.getEmpresaId())) {
+            throw new IllegalArgumentException("Fechamento não encontrado");
+        }
+
+        Usuario quem = usuarioRepository.findById(TenantContext.getUsuarioId())
+                .orElseThrow(() -> new IllegalArgumentException("Sessão inválida"));
+        registrarLog(fechamento.getEmpresa(), fechamento.getAno(), fechamento.getMes(), AcaoFechamento.REABERTO, quem);
+
+        saldoFechamentoRepository.deleteByFechamentoId(fechamento.getId());
+        fechamentoRepository.delete(fechamento);
+    }
+
+    public PaginaDTO<FechamentoLogResponseDTO> historico(FechamentoLogFiltroDTO filtro, Pageable pageable) {
+        UUID empresaId = TenantContext.isSuperAdmin() ? filtro.empresaId() : TenantContext.getEmpresaId();
+
+        Specification<FechamentoLog> spec = Specification
+                .where(FechamentoLogSpecification.comEmpresaId(empresaId))
+                .and(FechamentoLogSpecification.comAno(filtro.ano()))
+                .and(FechamentoLogSpecification.comMes(filtro.mes()))
+                .and(FechamentoLogSpecification.comAcao(filtro.acao()));
+
+        Page<FechamentoLogResponseDTO> pagina = fechamentoLogRepository.findAll(spec, pageable)
+                .map(FechamentoLogResponseDTO::fromEntity);
+        return PaginaDTO.fromPage(pagina);
+    }
+
+    private void registrarLog(Empresa empresa, int ano, int mes, AcaoFechamento acao, Usuario quem) {
+        FechamentoLog log = new FechamentoLog();
+        log.setEmpresa(empresa);
+        log.setAno(ano);
+        log.setMes(mes);
+        log.setAcao(acao);
+        log.setUsuario(quem);
+        log.setQuando(Instant.now());
+        fechamentoLogRepository.save(log);
     }
 
     private static String rotulo(YearMonth mes) {

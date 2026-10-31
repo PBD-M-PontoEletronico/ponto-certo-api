@@ -16,4 +16,6 @@ public interface FeriadoRepository extends JpaRepository<Feriado, UUID> {
     boolean existsByEmpresaIdAndDataAndSetorIsNull(UUID empresaId, LocalDate data);
 
     boolean existsByEmpresaIdAndDataAndSetorId(UUID empresaId, LocalDate data, UUID setorId);
+
+    boolean existsBySetorId(UUID setorId);
 }

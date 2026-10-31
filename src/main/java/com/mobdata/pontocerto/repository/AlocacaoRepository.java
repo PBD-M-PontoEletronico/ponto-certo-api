@@ -9,6 +9,8 @@ import java.util.UUID;
 
 public interface AlocacaoRepository extends JpaRepository<Alocacao, UUID> {
 
+    boolean existsBySetorId(UUID setorId);
+
     List<Alocacao> findAllByUsuarioId(UUID usuarioId);
 
     List<Alocacao> findAllBySetorIdAndDataFimGreaterThanEqual(UUID setorId, LocalDate hoje);

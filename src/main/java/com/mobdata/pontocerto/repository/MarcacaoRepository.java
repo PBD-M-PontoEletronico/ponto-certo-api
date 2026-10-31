@@ -18,4 +18,6 @@ public interface MarcacaoRepository extends JpaRepository<Marcacao, UUID>, JpaSp
     // Marcações do funcionário numa janela de tempo (espelho e análise de pedido).
     List<Marcacao> findAllByUsuarioIdAndHoraAparelhoBetweenOrderByHoraAparelhoAsc(
             UUID usuarioId, Instant inicio, Instant fim);
+
+    boolean existsBySetorId(UUID setorId);
 }
