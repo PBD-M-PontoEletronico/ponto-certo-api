@@ -5,27 +5,14 @@ import com.mobdata.pontocerto.dto.EspelhoJustificativaDTO;
 import com.mobdata.pontocerto.dto.EspelhoMarcacaoDTO;
 import com.mobdata.pontocerto.dto.EspelhoTurnoDTO;
 import com.mobdata.pontocerto.dto.SituacaoDia;
-import com.mobdata.pontocerto.model.Afastamento;
-import com.mobdata.pontocerto.model.Alocacao;
-import com.mobdata.pontocerto.model.Feriado;
-import com.mobdata.pontocerto.model.Marcacao;
-import com.mobdata.pontocerto.model.StatusSolicitacao;
-import com.mobdata.pontocerto.model.TipoSolicitacao;
-import com.mobdata.pontocerto.model.Usuario;
-import com.mobdata.pontocerto.repository.AfastamentoRepository;
-import com.mobdata.pontocerto.repository.AlocacaoRepository;
-import com.mobdata.pontocerto.repository.FeriadoRepository;
-import com.mobdata.pontocerto.repository.MarcacaoRepository;
-import com.mobdata.pontocerto.repository.SolicitacaoRepository;
-import com.mobdata.pontocerto.repository.UsuarioRepository;
+import com.mobdata.pontocerto.model.*;
+import com.mobdata.pontocerto.repository.*;
 import com.mobdata.pontocerto.security.TenantContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.YearMonth;
-import java.time.ZoneId;
+import java.time.*;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -67,6 +54,9 @@ public class EspelhoService {
     @Autowired
     private SolicitacaoRepository solicitacaoRepository;
 
+    @Autowired
+    private SaldoFechamentoRepository saldoFechamentoRepository;
+
     @Transactional(readOnly = true)
     public List<EspelhoDiaDTO> espelhoDoMes(UUID usuarioId, YearMonth mes) {
         Usuario usuario = usuarioRepository.findById(usuarioId)
@@ -76,24 +66,65 @@ public class EspelhoService {
         LocalDate inicio = mes.atDay(1);
         LocalDate fim = mes.atEndOfMonth();
 
-        Map<LocalDate, List<EspelhoMarcacaoDTO>> marcacoesPorDia = marcacoesDoPeriodo(usuarioId, inicio, fim)
-                .stream()
-                .collect(Collectors.groupingBy(m -> diaDa(m),
+        List<Marcacao> marcacoes = marcacoesDoPeriodo(usuarioId, inicio, fim);
+
+        Map<LocalDate, List<EspelhoMarcacaoDTO>> marcacoesPorDia = marcacoes.stream()
+                .collect(Collectors.groupingBy(EspelhoService::diaDa,
                         Collectors.mapping(EspelhoMarcacaoDTO::fromEntity, Collectors.toList())));
 
-        // Justificativas recusadas não aparecem: não mudam nada no mês.
         Map<LocalDate, List<EspelhoJustificativaDTO>> justificativasPorDia = solicitacaoRepository
                 .findAllByUsuarioIdAndTipoAndDataBetweenOrderByDataAsc(usuarioId, TipoSolicitacao.JUSTIFICATIVA, inicio, fim)
                 .stream()
                 .filter(s -> s.getStatus() != StatusSolicitacao.RECUSADA)
-                .collect(Collectors.groupingBy(s -> s.getData(),
+                .collect(Collectors.groupingBy(Solicitacao::getData,
                         Collectors.mapping(EspelhoJustificativaDTO::fromEntity, Collectors.toList())));
+        // Jornadas (ENTRADA->SAIDA) atribuídas ao dia da ENTRADA: turno que vira a
+        // meia-noite conta no dia em que começou (critério 3).
+        Map<LocalDate, List<HorasCalculo.Jornada>> jornadasPorDia = HorasCalculo
+                .montarJornadas(marcacoes, FUSO).stream()
+                .collect(Collectors.groupingBy(HorasCalculo.Jornada::diaDeInicio));
 
-        return agendaDoPeriodo(usuario, inicio, fim).stream()
-                .map(dia -> dia.comRealizado(
-                        marcacoesPorDia.getOrDefault(dia.data(), List.of()),
-                        justificativasPorDia.getOrDefault(dia.data(), List.of())))
-                .toList();
+        int anoMesAtual = mes.getYear() * 100 + mes.getMonthValue();
+        long saldoAcumulado = saldoFechamentoRepository
+                .findFirstByUsuarioIdAndAnoMesLessThanOrderByAnoMesDesc(usuarioId, anoMesAtual)
+                .map(SaldoFechamento::getSaldoAcumuladoMinutos)
+                .orElse(0L);
+
+        List<EspelhoDiaDTO> dias = new ArrayList<>();
+        for (EspelhoDiaDTO diaBase : agendaDoPeriodo(usuario, inicio, fim)) {
+            List<HorasCalculo.Jornada> jornadasDoDia = jornadasPorDia.getOrDefault(diaBase.data(), List.of());
+            boolean algumaIncompleta = jornadasDoDia.stream().anyMatch(j -> !j.completa());
+
+            Integer minutosTrabalhados = algumaIncompleta
+                    ? null
+                    : jornadasDoDia.stream().mapToInt(HorasCalculo.Jornada::minutosTrabalhados).sum();
+
+            Integer minutosAtraso = calcularAtraso(diaBase, jornadasDoDia);
+
+            Integer saldoDoDia = minutosTrabalhados == null ? null : minutosTrabalhados - diaBase.minutosPrevistos();
+            saldoAcumulado += (saldoDoDia == null ? 0 : saldoDoDia);
+
+            EspelhoDiaDTO comRealizado = diaBase.comRealizado(
+                    marcacoesPorDia.getOrDefault(diaBase.data(), List.of()),
+                    justificativasPorDia.getOrDefault(diaBase.data(), List.of()));
+
+            dias.add(comRealizado.comHoras(minutosTrabalhados, minutosAtraso, saldoDoDia, (int) saldoAcumulado));
+        }
+        return dias;
+    }
+
+    private Integer calcularAtraso(EspelhoDiaDTO diaBase, List<HorasCalculo.Jornada> jornadasDoDia) {
+        if (diaBase.turnos().isEmpty() || jornadasDoDia.isEmpty()) {
+            return null; // sem turno previsto ou sem entrada registrada: não aplicável
+        }
+        LocalTime inicioPrevisto = diaBase.turnos().get(0).horaInicio();
+        Instant entradaMaisAntiga = jornadasDoDia.stream()
+                .map(HorasCalculo.Jornada::horaEntrada)
+                .min(Comparator.naturalOrder())
+                .orElseThrow();
+        Instant previsto = LocalDateTime.of(diaBase.data(), inicioPrevisto).atZone(FUSO).toInstant();
+        long diffMinutos = Duration.between(previsto, entradaMaisAntiga).toMinutes();
+        return (int) Math.max(0, diffMinutos);
     }
 
     /**
@@ -143,11 +174,10 @@ public class EspelhoService {
 
     private EspelhoDiaDTO montarDia(LocalDate data, List<Alocacao> alocacoes,
                                     List<Afastamento> afastamentos, List<Feriado> feriados) {
-        // Afastamento é da pessoa e vale para todas as alocações do dia
         Optional<Afastamento> afastamento = DispensaCalculo.afastamentoNoDia(afastamentos, data);
         if (afastamento.isPresent()) {
             return new EspelhoDiaDTO(data, SituacaoDia.AFASTAMENTO,
-                    afastamento.get().getTipo().getRotulo(), List.of());
+                    afastamento.get().getTipo().getRotulo(), List.of(), 0);
         }
 
         List<Alocacao> ativas = alocacoes.stream()
@@ -155,40 +185,37 @@ public class EspelhoService {
                 .toList();
 
         List<EspelhoTurnoDTO> turnos = new ArrayList<>();
+        int minutosPrevistos = 0;
         Feriado feriadoDoDia = null;
 
         for (Alocacao alocacao : ativas) {
-            // Feriado vale por setor: só dispensa quem está alocado onde ele vale
             Optional<Feriado> feriado = DispensaCalculo.feriadoNoDia(feriados, alocacao.getSetor(), data);
             if (feriado.isPresent()) {
                 feriadoDoDia = feriado.get();
                 continue;
             }
+            if (!EscalaCalculo.ehDiaDeTrabalho(alocacao.getEscala(), data)) {
+                continue;
+            }
+
+            for (Turno turno : alocacao.getEscala().getTurnos()) {
+                minutosPrevistos += turno.duracaoMinutos();
+            }
 
             for (EscalaCalculo.PeriodoTurno periodo : EscalaCalculo.projetarTurnos(alocacao.getEscala(), data, data)) {
                 turnos.add(new EspelhoTurnoDTO(
-                        periodo.inicio().toLocalTime(),
-                        periodo.fim().toLocalTime(),
+                        periodo.inicio().toLocalTime(), periodo.fim().toLocalTime(),
                         !periodo.fim().toLocalDate().equals(periodo.inicio().toLocalDate()),
-                        alocacao.getSetor().getId(),
-                        alocacao.getSetor().getNome(),
-                        alocacao.getEscala().getNome()
+                        alocacao.getSetor().getId(), alocacao.getSetor().getNome(), alocacao.getEscala().getNome()
                 ));
             }
         }
-
         turnos.sort(Comparator.comparing(EspelhoTurnoDTO::horaInicio));
 
-        if (!turnos.isEmpty()) {
-            return new EspelhoDiaDTO(data, SituacaoDia.TRABALHO, null, turnos);
-        }
-        if (feriadoDoDia != null) {
-            return new EspelhoDiaDTO(data, SituacaoDia.FERIADO, feriadoDoDia.getDescricao(), List.of());
-        }
-        if (!ativas.isEmpty()) {
-            return new EspelhoDiaDTO(data, SituacaoDia.FOLGA, null, List.of());
-        }
-        return new EspelhoDiaDTO(data, SituacaoDia.SEM_ALOCACAO, null, List.of());
+        if (!turnos.isEmpty()) return new EspelhoDiaDTO(data, SituacaoDia.TRABALHO, null, turnos, minutosPrevistos);
+        if (feriadoDoDia != null) return new EspelhoDiaDTO(data, SituacaoDia.FERIADO, feriadoDoDia.getDescricao(), List.of(), 0);
+        if (!ativas.isEmpty()) return new EspelhoDiaDTO(data, SituacaoDia.FOLGA, null, List.of(), 0);
+        return new EspelhoDiaDTO(data, SituacaoDia.SEM_ALOCACAO, null, List.of(), 0);
     }
 
     private void verificarAcessoAoUsuario(Usuario usuario) {

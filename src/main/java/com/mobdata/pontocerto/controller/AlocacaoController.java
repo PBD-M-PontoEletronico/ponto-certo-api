@@ -61,4 +61,10 @@ public class AlocacaoController {
     ) {
         return ResponseEntity.ok(alocacaoService.agenda(id, dataInicio, dataFim));
     }
+
+    @DeleteMapping("/alocacoes/{id}")
+    public ResponseEntity<Void> excluir(@PathVariable UUID id) {
+        alocacaoService.excluir(id);
+        return ResponseEntity.noContent().build();
+    }
 }
