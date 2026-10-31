@@ -5,9 +5,7 @@ import com.mobdata.pontocerto.dto.SetorFiltroDTO;
 import com.mobdata.pontocerto.dto.SetorRequestDTO;
 import com.mobdata.pontocerto.model.Empresa;
 import com.mobdata.pontocerto.model.Setor;
-import com.mobdata.pontocerto.repository.AlocacaoRepository;
-import com.mobdata.pontocerto.repository.EmpresaRepository;
-import com.mobdata.pontocerto.repository.SetorRepository;
+import com.mobdata.pontocerto.repository.*;
 import com.mobdata.pontocerto.security.TenantContext;
 import com.mobdata.pontocerto.specification.SetorSpecification;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +29,15 @@ public class SetorService {
 
     @Autowired
     private AlocacaoRepository alocacaoRepository;
+
+    @Autowired
+    private MarcacaoRepository marcacaoRepository;
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private FeriadoRepository feriadoRepository;
 
     public Setor cadastrar(SetorRequestDTO request) {
         Empresa empresa = resolverEmpresa(request.empresaId());
@@ -70,10 +77,30 @@ public class SetorService {
     public void excluir(UUID id) {
         Setor setor = buscarPorId(id);
 
-        if (alocacaoRepository.existsBySetorIdAndDataFimGreaterThanEqual(setor.getId(), LocalDate.now())) {
+        if (alocacaoRepository.existsBySetorId(setor.getId())) {
             throw new IllegalStateException(
                     "Não é possível excluir o setor \"" + setor.getNome()
-                            + "\": há funcionário(s) alocado(s) nele. Encerre as alocações antes de excluir."
+                            + "\": existe(m) alocação(ões) (atual, passada ou futura) registradas nele. "
+                            + "Exclua as alocações desse setor primeiro."
+            );
+        }
+        if (marcacaoRepository.existsBySetorId(setor.getId())) {
+            throw new IllegalStateException(
+                    "Não é possível excluir o setor \"" + setor.getNome()
+                            + "\": existem marcações de ponto registradas nele."
+            );
+        }
+        if (usuarioRepository.existsBySetorId(setor.getId())) {
+            throw new IllegalStateException(
+                    "Não é possível excluir o setor \"" + setor.getNome()
+                            + "\": existe uma conta de dispositivo (relógio de setor) vinculada a ele. "
+                            + "Exclua ou realoque o dispositivo primeiro."
+            );
+        }
+        if (feriadoRepository.existsBySetorId(setor.getId())) {
+            throw new IllegalStateException(
+                    "Não é possível excluir o setor \"" + setor.getNome()
+                            + "\": existe(m) feriado(s) específico(s) desse setor cadastrado(s)."
             );
         }
 
