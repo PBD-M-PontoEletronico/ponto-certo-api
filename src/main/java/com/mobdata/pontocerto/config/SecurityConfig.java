@@ -60,6 +60,8 @@ public class SecurityConfig {
                         .requestMatchers("/feriados/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .requestMatchers("/afastamentos/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         .requestMatchers("/fechamentos/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
+                        // W12 — relatórios de previsto contra realizado
+                        .requestMatchers("/relatorios/**").hasAnyAuthority("SUPERADMIN", "RH_ADMIN")
                         // W10 — pedidos: o funcionário cria e acompanha os dele; a fila,
                         // o contexto e a análise são do gestor/RH. Ver/baixar um pedido
                         // específico o service libera para o dono ou para a empresa.

@@ -30,6 +30,9 @@ import java.util.stream.Collectors;
  * W10 — além do previsto, cada dia traz o realizado: as marcações batidas
  * (originais) e as criadas por ajuste aprovado, separadas para aparecerem
  * lado a lado, e as justificativas pendentes/aprovadas do dia.
+ *
+ * W12 — o cálculo dos dias foi separado em calcularDias() para o relatório
+ * de previsto contra realizado reaproveitar exatamente a mesma conta.
  */
 @Service
 public class EspelhoService {
@@ -63,9 +66,29 @@ public class EspelhoService {
                 .orElseThrow(() -> new IllegalArgumentException("Funcionário não encontrado"));
         verificarAcessoAoUsuario(usuario);
 
-        LocalDate inicio = mes.atDay(1);
-        LocalDate fim = mes.atEndOfMonth();
+        int anoMesAtual = mes.getYear() * 100 + mes.getMonthValue();
+        long saldoInicial = saldoFechamentoRepository
+                .findFirstByUsuarioIdAndAnoMesLessThanOrderByAnoMesDesc(usuarioId, anoMesAtual)
+                .map(SaldoFechamento::getSaldoAcumuladoMinutos)
+                .orElse(0L);
 
+        return calcularDias(usuario, mes.atDay(1), mes.atEndOfMonth(), saldoInicial);
+    }
+
+    /**
+     * W12 — mesmos dias do espelho (previsto + realizado + horas), para um
+     * intervalo qualquer [inicio, fim]. Usado pelo relatório de previsto
+     * contra realizado. O saldo acumulado começa em zero (o relatório não usa
+     * banco de horas). Não checa permissão: quem chama garante que o
+     * funcionário é da empresa de quem está logado.
+     */
+    @Transactional(readOnly = true)
+    public List<EspelhoDiaDTO> diasDoPeriodo(Usuario usuario, LocalDate inicio, LocalDate fim) {
+        return calcularDias(usuario, inicio, fim, 0L);
+    }
+
+    private List<EspelhoDiaDTO> calcularDias(Usuario usuario, LocalDate inicio, LocalDate fim, long saldoInicial) {
+        UUID usuarioId = usuario.getId();
         List<Marcacao> marcacoes = marcacoesDoPeriodo(usuarioId, inicio, fim);
 
         Map<LocalDate, List<EspelhoMarcacaoDTO>> marcacoesPorDia = marcacoes.stream()
@@ -84,11 +107,7 @@ public class EspelhoService {
                 .montarJornadas(marcacoes, FUSO).stream()
                 .collect(Collectors.groupingBy(HorasCalculo.Jornada::diaDeInicio));
 
-        int anoMesAtual = mes.getYear() * 100 + mes.getMonthValue();
-        long saldoAcumulado = saldoFechamentoRepository
-                .findFirstByUsuarioIdAndAnoMesLessThanOrderByAnoMesDesc(usuarioId, anoMesAtual)
-                .map(SaldoFechamento::getSaldoAcumuladoMinutos)
-                .orElse(0L);
+        long saldoAcumulado = saldoInicial;
 
         List<EspelhoDiaDTO> dias = new ArrayList<>();
         for (EspelhoDiaDTO diaBase : agendaDoPeriodo(usuario, inicio, fim)) {
